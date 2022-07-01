@@ -53,5 +53,24 @@ qplot(lambda, as.numeric(rmse), geom = c("point", "line"))
 rm(rmse)
 
 #latent factor in sgd
-#rating table
-rtable <- dcast(sample_train, userId ~ movieId, value.var = "rating")
+#rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
+residual_train <- function(l){
+  
+  m_bias <- sample_train[u_bias, on = .(userId)][
+    , .(sum(rating - g_mean - V1)/(l + .N)), by = .(movieId)]
+  
+  est <- sample_train[u_bias, on = .(userId)][
+    m_bias, on = .(movieId)][
+      , .(V1 + i.V1 + g_mean), by = .(userId, movieId)]
+  
+  err <- sample_train[est, on = .(userId, movieId)][
+    , .(rating - V1), by = .(userId, movieId)]
+  
+  return(err)
+}
+
+temp_resid <- residual_train(lambda)
+rtable <- dcast(temp_resid, userId ~ movieId, value.var = "V1")
+rm(temp_resid)
+
+#sgd
