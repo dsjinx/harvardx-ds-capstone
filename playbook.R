@@ -71,6 +71,16 @@ residual_train <- function(l){
 
 temp_resid <- residual_train(lambda)
 rtable <- dcast(temp_resid, userId ~ movieId, value.var = "V1")
-rm(temp_resid)
 
 #sgd
+#?inspect temp_resid$V1 to decide the starting P,Q matrix distribution
+#?possibly start with QQ plot
+r_mean <- temp_resid[, mean(V1)]
+r_sd <- temp_resid[, sd(V1)]
+p <- seq(0.05, 0.95, 0.05)
+r_quantile <- temp_resid[, quantile(V1, p)]
+n_quantile <- qnorm(p, r_mean, r_sd)
+qplot(n_quantile, r_quantile) + geom_abline()
+
+#the about normal distribution of residual to allow us making an normal 
+#assumption, under which we can initialise the P U for sgd learning
