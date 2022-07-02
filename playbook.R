@@ -7,10 +7,11 @@ library(data.table)
 
 load("~/Work/Rproj/PH125.9x/harvardx-ds-capstone/misc/edx.Rdata")
 edx %>% tibble()
-set.seed(9 ,sample.kind = "rounding")
+set.seed(9 ,sample.kind = "Rounding")
 sample <- sample(1:9000000, 9999, replace = FALSE)
 edx_sample <- edx[sample,]
 
+set.seed(2 ,sample.kind = "Rounding")
 ind <- createDataPartition(edx_sample$rating, 1, p = 0.1, list = FALSE)
 sample_train <- edx_sample[-ind,]
 sample_test <- edx_sample[ind,] %>% 
@@ -47,8 +48,8 @@ rmse <- lapply(lambda, function(l){
   return(rmse)
 })
 
-lambda <- lambda[which.min(rmse)]
 qplot(lambda, as.numeric(rmse), geom = c("point", "line"))
+lambda <- lambda[which.min(rmse)]
 
 rm(rmse)
 
@@ -71,6 +72,7 @@ residual_train <- function(l){
 
 temp_resid <- residual_train(lambda)
 rtable <- dcast(temp_resid, userId ~ movieId, value.var = "V1")
+sum(!is.na(rtable[,-1])) #highly sparse matrix
 
 #sgd
 #?inspect temp_resid$V1 to decide the starting P,Q matrix distribution
@@ -84,3 +86,4 @@ qplot(n_quantile, r_quantile) + geom_abline()
 
 #the about normal distribution of residual to allow us making an normal 
 #assumption, under which we can initialise the P U for sgd learning
+
