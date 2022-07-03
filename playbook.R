@@ -1,6 +1,7 @@
 library(tidyverse)
 library(caret)
 library(data.table)
+library(Matrix)
 
 #load the edx data from misc folder
 #create a sample out of edx, and make a pair of train/test sets  
@@ -28,8 +29,8 @@ g_mean <- mean(sample_train$rating)
 #user bias
 u_bias <- sample_train[, .(mean(rating - g_mean)), by = .(userId)]
 #movie bias with voting count regulation (eg. lambda = 0.5)
-m_bias <- sample_train[u_bias, on = .(userId)][
-  , .(sum(rating - g_mean - V1)/(0.5 + .N)), by = .(movieId)]
+#m_bias <- sample_train[u_bias, on = .(userId)][
+#  , .(sum(rating - g_mean - V1)/(0.5 + .N)), by = .(movieId)]
 #tune the lambda by RMSE
 lambda <- seq(0, 5, 0.1) #guessing and reviewing with qplot
 
@@ -86,4 +87,19 @@ qplot(n_quantile, r_quantile) + geom_abline()
 
 #the about normal distribution of residual to allow us making an normal 
 #assumption, under which we can initialise the P U for sgd learning
+rtable[is.na(rtable)] <- 0
+rtable <- Matrix(as.matrix(rtable[,-1]), sparse = TRUE) #exclude userId
+pca <- prcomp(rtable)
 
+#find effective rank 
+qplot(1:length(pca$sdev), pca$sdev, xlab = "PC") 
+
+i <- 0
+frac_var <- 0
+total_var <- sum(pca$sdev * pca$sdev)
+while (frac_var < 0.9 * total_var){
+  i <- i + 1
+  frac_var <- sum(pca$sdev[1:i] * pca$sdev[1:i])
+}#the loop gives 90% effective rank = 415 
+
+#prepare the warm start P Q both with rank = 400 for sgd
