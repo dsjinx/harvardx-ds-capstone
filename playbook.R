@@ -89,17 +89,23 @@ qplot(n_quantile, r_quantile) + geom_abline()
 #assumption, under which we can initialise the P U for sgd learning
 rtable[is.na(rtable)] <- 0
 rtable <- Matrix(as.matrix(rtable[,-1]), sparse = TRUE) #exclude userId
-pca <- prcomp(rtable)
+rating_train <- rtable@x #non-zero ratings
+rtable_i <- rtable@i #row index of non-zero 
+rtable_j <- rep(1:rtable@Dim[2], diff(rtable@p)) #col index of non-zero
 
-#find effective rank 
-qplot(1:length(pca$sdev), pca$sdev, xlab = "PC") 
+#the warm start P Q matrix for sgd
+set.seed(0 ,sample.kind = "Rounding")
+k <- 83
+P <- matrix(rnorm(k*rtable@Dim[1], r_mean, r_sd), nrow =  k)
+Q <- matrix(rnorm(k*rtable@Dim[2], r_mean, r_sd), nrow =  k)
 
-i <- 0
-frac_var <- 0
-total_var <- sum(pca$sdev * pca$sdev)
-while (frac_var < 0.9 * total_var){
-  i <- i + 1
-  frac_var <- sum(pca$sdev[1:i] * pca$sdev[1:i])
-}#the loop gives 90% effective rank = 415 
-
-#prepare the warm start P Q both with rank = 400 for sgd
+sgd <- function(P, Q, L_rate, epochs){
+  
+  err <- (P[,u] %*% Q[,i]) - rtable@x[ui] 
+  p_grad <- err * Q[,i] + lambda_p * P[,u]
+  q_grad <- err * P[,u] + lambda_q * Q[,i]
+  
+  P[,u] <- P[,u] - L_rate * p_grad
+  Q[,i] <- Q[,i] - L_rate * q_grad
+  
+}
