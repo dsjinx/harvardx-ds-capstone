@@ -93,19 +93,36 @@ rating_train <- rtable@x #non-zero ratings
 rtable_i <- rtable@i #row index of non-zero 
 rtable_j <- rep(1:rtable@Dim[2], diff(rtable@p)) #col index of non-zero
 
-#the warm start P Q matrix for sgd
-set.seed(0 ,sample.kind = "Rounding")
+#warm start P Q matrix for sgd
 k <- 83
 P <- matrix(rnorm(k*rtable@Dim[1], r_mean, r_sd), nrow =  k)
 Q <- matrix(rnorm(k*rtable@Dim[2], r_mean, r_sd), nrow =  k)
 
-sgd <- function(P, Q, L_rate, epochs){
+sgd <- function(P, Q, y, L_rate, batch_size, epochs){
+  #y: rating table to be trained against (rtable in dgCMatrix sparse format)
+  #lambda_p/q: not tuned for now, on personal preference
+  n <- length(y@x)
+  r <- y@x #ratings in dense form
+  u <- y@i+1 #rating row index
+  i <- rep(1:y@Dim[2], diff(y@p)) #rating column index
+  learning_log <- list()  
   
-  err <- (P[,u] %*% Q[,i]) - rtable@x[ui] 
-  p_grad <- err * Q[,i] + lambda_p * P[,u]
-  q_grad <- err * P[,u] + lambda_q * Q[,i]
+  for (t in 1:epochs){
+    
+    batch_id <- sample(1:n, batch_size, replace = FALSE)
+    
+    for (ui in batch_id){
+        
+        err_ui <- P[,u[ui]] %*% Q[,i[ui]] - r[ui]
+        p_grad <- err * Q[,i[ui]] + lambda_p * P[,u[ui]]
+        q_grad <- err * P[,u[ui]] + lambda_q * Q[,i[ui]]
+        
+        P[,u[ui]] <- P[,u[ui]] - L_rate * p_grad
+        Q[,i[ui]] <- Q[,i[ui]] - L_rate * q_grad
+    }
   
-  P[,u] <- P[,u] - L_rate * p_grad
-  Q[,i] <- Q[,i] - L_rate * q_grad
-  
+  err <- t(P) %*% Q - r ####solve the index?????? 
+  learning_log[[t]] <-sqrt(mean(err^2)) 
+  }
+  return(learning_log)
 }
