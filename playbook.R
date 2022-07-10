@@ -25,26 +25,26 @@ rm(edx, edx_sample, ind, sample)
 
 #de-mean 
 #global mean
-g_mean <- mean(sample_train$rating) 
+g_mean <- mean(sample_train$rating)
 #user bias
-u_bias <- sample_train[, .(mean(rating - g_mean)), by = .(userId)]
+u_bias <- sample_train[, .(u_bias = mean(rating - g_mean)), by = .(userId)]
 #movie bias with voting count regulation (eg. lambda = 0.5)
 #m_bias <- sample_train[u_bias, on = .(userId)][
-#  , .(sum(rating - g_mean - V1)/(0.5 + .N)), by = .(movieId)]
+#  , .(m_bias = sum(rating - g_mean - u_bias)/(0.5 + .N)), by = .(movieId)]
 #tune the lambda by RMSE
 lambda <- seq(0, 5, 0.1) #guessing and reviewing with qplot
 
 rmse <- lapply(lambda, function(l){
   
   m_bias <- sample_train[u_bias, on = .(userId)][
-    , .(sum(rating - g_mean - V1)/(l + .N)), by = .(movieId)]
+    , .(m_bias = sum(rating - g_mean - u_bias)/(l + .N)), by = .(movieId)]
   
   pred <- sample_test[u_bias, on = .(userId)][
     m_bias, on = .(movieId)][
-      !is.na(rating), .(V1 + i.V1 + g_mean), by = .(userId, movieId)]
+      !is.na(rating), .(pred = u_bias + m_bias + g_mean), by = .(userId, movieId)]
   
   rmse <- sample_test[pred, on = .(userId, movieId)][
-    , sqrt(mean((rating - V1)^2))]
+    , sqrt(mean((rating - pred)^2))]
   
   return(rmse)
 })
@@ -59,53 +59,69 @@ rm(rmse)
 residual_train <- function(l){
   
   m_bias <- sample_train[u_bias, on = .(userId)][
-    , .(sum(rating - g_mean - V1)/(l + .N)), by = .(movieId)]
+    , .(m_bias = sum(rating - g_mean - u_bias)/(l + .N)), by = .(movieId)]
   
   est <- sample_train[u_bias, on = .(userId)][
     m_bias, on = .(movieId)][
-      , .(V1 + i.V1 + g_mean), by = .(userId, movieId)]
+      , .(est = u_bias + m_bias + g_mean), by = .(userId, movieId)]
   
-  err <- sample_train[est, on = .(userId, movieId)][
-    , .(rating - V1), by = .(userId, movieId)]
+  resid <- sample_train[est, on = .(userId, movieId)][
+    , .(resid = rating - est), by = .(userId, movieId)]
   
-  return(err)
+  return(list(resid, m_bias))
 }
 
-temp_resid <- residual_train(lambda)
-rtable <- dcast(temp_resid, userId ~ movieId, value.var = "V1")
-sum(!is.na(rtable[,-1])) #highly sparse matrix
+m_bias <- residual_train(lambda)[[2]]
+temp_resid <- residual_train(lambda)[[1]]
+rtable <- dcast(temp_resid, userId ~ movieId, value.var = "resid")
+sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
 
-#sgd
 #?inspect temp_resid$V1 to decide the starting P,Q matrix distribution
 #?possibly start with QQ plot
-r_mean <- temp_resid[, mean(V1)]
-r_sd <- temp_resid[, sd(V1)]
+r_mean <- temp_resid[, mean(resid)]
+r_sd <- temp_resid[, sd(resid)]
 p <- seq(0.05, 0.95, 0.05)
 r_quantile <- temp_resid[, quantile(V1, p)]
 n_quantile <- qnorm(p, r_mean, r_sd)
 qplot(n_quantile, r_quantile) + geom_abline()
 
+rm(residual_train, p, temp_resid)
+
+#sgd
 #the about normal distribution of residual to allow us making an normal 
 #assumption, under which we can initialise the P U for sgd learning
-rtable[is.na(rtable)] <- 0
-rtable <- Matrix(as.matrix(rtable[,-1]), sparse = TRUE) #exclude userId
-rating_train <- rtable@x #non-zero ratings
-rtable_i <- rtable@i #row index of non-zero 
-rtable_j <- rep(1:rtable@Dim[2], diff(rtable@p)) #col index of non-zero
+rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
+id_NA <- which(is.na(rtable_sparse@x))
+range(rtable_sparse@x[-id_NA])
+length(which(rtable_sparse ==0))
+#inspection tells us we have 3050 perfect pred by 0 resid, which fills the 
+#gap between number of non-NA's and @x non zeros
+#!!!!!!0 resid is a sign of overfitting, need to consider add regulation on u_bias
+rtable_sparse[is.na(rtable_sparse)] <- 0
+rating_train <- rtable_sparse@x #non-zero ratings
+rtable_i <- rtable_sparse@i + 1 #row index of non-zero 
+rtable_j <- rep(1:rtable_sparse@Dim[2], diff(rtable_sparse@p)) #col index of non-zero
+
+rm(rtable, id_NA)
 
 #warm start P Q matrix for sgd
-k <- 83
-P <- matrix(rnorm(k*rtable@Dim[1], r_mean, r_sd), nrow =  k)
-Q <- matrix(rnorm(k*rtable@Dim[2], r_mean, r_sd), nrow =  k)
+k <- 20
+set.seed(0, sample.kind = "Rounding")
+P <- matrix(rnorm(k*rtable_sparse@Dim[1], r_mean, r_sd), nrow =  k)
+set.seed(0, sample.kind = "Rounding")
+Q <- matrix(rnorm(k*rtable_sparse@Dim[2], r_mean, r_sd), nrow =  k)
+##?? make a pair of sparse P Q, with only non zero columns corresponding to u i 
 
-sgd <- function(P, Q, y, L_rate, batch_size, epochs){
-  #y: rating table to be trained against (rtable in dgCMatrix sparse format)
+
+sgd <- function(P, Q, y, L_rate, lambda_q, lambda_p, batch_size, epochs){
+  #y: rating table to be trained on (rtable_sparse in dgCMatrix sparse format)
   #lambda_p/q: not tuned for now, on personal preference
-  n <- length(y@x)
-  r <- y@x #ratings in dense form
-  u <- y@i+1 #rating row index
-  i <- rep(1:y@Dim[2], diff(y@p)) #rating column index
-  learning_log <- list()  
+  #batch_size: should be integer << number of ratings to be trained on
+  n <- length(y@x) #number of non zero ratings
+  r <- y@x #ratings to be learned on
+  u <- rtable_i #rating row index, default starting is 0
+  i <- rtable_j #ratings in dense format column index
+  learning_log <- list()
   
   for (t in 1:epochs){
     
@@ -113,16 +129,41 @@ sgd <- function(P, Q, y, L_rate, batch_size, epochs){
     
     for (ui in batch_id){
         
-        err_ui <- P[,u[ui]] %*% Q[,i[ui]] - r[ui]
-        p_grad <- err * Q[,i[ui]] + lambda_p * P[,u[ui]]
-        q_grad <- err * P[,u[ui]] + lambda_q * Q[,i[ui]]
+        err_ui <- c(P[,u[ui]] %*% Q[,i[ui]] - r[ui]) 
+        p_grad <- err_ui * Q[,i[ui]] + lambda_p * P[,u[ui]]
+        q_grad <- err_ui * P[,u[ui]] + lambda_q * Q[,i[ui]]
         
         P[,u[ui]] <- P[,u[ui]] - L_rate * p_grad
         Q[,i[ui]] <- Q[,i[ui]] - L_rate * q_grad
     }
   
-  err <- t(P) %*% Q - r ####solve the index?????? 
-  learning_log[[t]] <-sqrt(mean(err^2)) 
+    #err <- P[,u] %*% Q[,i] - r #??need to fix
+    #learning_log[[t]] <-sqrt(mean(err^2)) 
   }
-  return(learning_log)
+  #return(learning_log)
+}
+
+##?? parallise RMSE
+#err_resid <- t(P) %*% Q - rtable
+#rmse_learning <- sqrt(mean(t(err_resid)%*%err_resid))
+#sgd template tested working
+sgd <- function(L_rate,epochs){
+  
+  learning_log <- list()
+  
+  for ( t in 1:epochs){
+    
+    ids <- sample(1:length(x_s@x), 1)
+    
+    for (id in ids){
+      err <- c(p[,u[id]] %*% q[,i[id]] - x_s[id])
+      nabla_p <- err * q[, i[id]] + 1 * p[,u[id]]
+      nabla_q <- err * p[, u[id]] + 1 * q[,i[id]]  
+      p[,u[id]] <- p[,u[id]] - L_rate * nabla_p
+      q[,i[id]] <- q[,i[id]] - L_rate * nabla_q    
+    }
+    err_log <- t(p) %*% q - x_s 
+    learning_log[[t]] <- sqrt(mean(apply(err_log, 2, crossprod)))
+  }
+  return(learning_log[[which.min(learning_log)]])
 }
