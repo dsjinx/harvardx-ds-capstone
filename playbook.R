@@ -3,6 +3,7 @@ library(caret)
 library(data.table)
 library(Matrix)
 library(doParallel)
+library(ggplot2)
 
 #load the edx data from misc folder
 #create a sample out of edx, and make a pair of train/test sets  
@@ -38,14 +39,13 @@ for(k in 1:5){
   test_cv[[k]] <- sample_train[ind_cv[[k]],]
 }
 
-lambda_test <- seq(15, 23, 0.1) #guessing and reviewing with qplot
-
 #implement parallel computing to save time
 cl <- makePSOCKcluster(2)
 registerDoParallel(cl)
+lambda_search <- seq(15, 23, 0.1) #guessing and reviewing with qplot
 tune_u <- foreach(k = 1:5) %:% 
-    foreach(l = lambda_test, .combine = rbindlist, 
-            .export = c("train_cv", "test_cv"), 
+    foreach(l = lambda_search, .combine = rbind, 
+            #.export = c("train_cv", "test_cv"), 
             .packages = c("data.table")) %dopar% {
       
       u_bias <- train_cv[[k]][
@@ -60,6 +60,11 @@ tune_u <- foreach(k = 1:5) %:%
       return(rmse)
   }
 stopCluster(cl)
+
+#plot the results by facet_grid
+for(k in 1:5){
+  
+}
 
 rmse_u <- lapply(lambda_test, function(l){
   #cross-validation method
