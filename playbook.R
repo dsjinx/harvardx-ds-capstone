@@ -39,13 +39,13 @@ for(k in 1:5){
   test_cv[[k]] <- sample_train[ind_cv[[k]],]
 }
 
+lambda_search <- seq(15, 23, 0.1) #guessing and reviewing with plotting
 #implement parallel computing to save time
 cl <- makePSOCKcluster(2)
 registerDoParallel(cl)
-lambda_search <- seq(15, 23, 0.1) #guessing and reviewing with qplot
-tune_u <- foreach(k = 1:5) %:% 
-    foreach(l = lambda_search, .combine = rbind, 
-            #.export = c("train_cv", "test_cv"), 
+ub_tune <- foreach(k = 1:5) %:% 
+    foreach(l = lambda_search, 
+            .combine = "c", 
             .packages = c("data.table")) %dopar% {
       
       u_bias <- train_cv[[k]][
@@ -56,10 +56,10 @@ tune_u <- foreach(k = 1:5) %:%
       
       rmse <- test_cv[[k]][pred, on = .(userId)][
         !is.na(rating), sqrt(mean((rating - pred)^2))]
-      
-      return(rmse)
-  }
-stopCluster(cl)
+      }
+stopCluster(cl) 
+rm(cl) #always clear any established clusters after stopping, otherwise it will
+#cause error in starting the next foreach parallel
 
 #plot the results by facet_grid
 for(k in 1:5){
