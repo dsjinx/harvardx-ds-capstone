@@ -2,6 +2,7 @@ library(tidyverse)
 library(caret)
 library(data.table)
 library(Matrix)
+library(doParallel)
 
 #load the edx data from misc folder
 #create a sample out of edx, and make a pair of train/test sets  
@@ -26,15 +27,64 @@ rm(edx, edx_sample, ind, sample)
 #de-mean 
 #global mean
 g_mean <- mean(sample_train$rating)
-#user bias
-u_bias <- sample_train[, .(u_bias = mean(rating - g_mean)), by = .(userId)]
-#movie bias with voting count regulation (eg. lambda = 0.5)
-#m_bias <- sample_train[u_bias, on = .(userId)][
-#  , .(m_bias = sum(rating - g_mean - u_bias)/(0.5 + .N)), by = .(movieId)]
-#tune the lambda by RMSE
-lambda <- seq(0, 5, 0.1) #guessing and reviewing with qplot
+#user and movie biases with count regulation lambda_u and lambda_m respectively
+#tune the lambda by cross validation
+set.seed(0, sample.kind= "Rounding")
+ind_cv <- createFolds(sample_train$userId, k = 5)
+train_cv <- list()
+test_cv <- list()
+for(k in 1:5){
+  train_cv[[k]] <- sample_train[-ind_cv[[k]],]
+  test_cv[[k]] <- sample_train[ind_cv[[k]],]
+}
 
-rmse <- lapply(lambda, function(l){
+lambda_test <- seq(15, 23, 0.1) #guessing and reviewing with qplot
+
+#implement parallel computing to save time
+cl <- makePSOCKcluster(2)
+registerDoParallel(cl)
+tune_u <- foreach(k = 1:5) %:% 
+    foreach(l = lambda_test, .combine = rbindlist, 
+            .export = c("train_cv", "test_cv"), 
+            .packages = c("data.table")) %dopar% {
+      
+      u_bias <- train_cv[[k]][
+        , .(u_bias = sum(rating - g_mean)/(l + .N)), by = .(userId)]
+      
+      pred <- test_cv[[k]][u_bias, on = .(userId)][
+        , .(pred = u_bias + g_mean), by = .(userId)]
+      
+      rmse <- test_cv[[k]][pred, on = .(userId)][
+        !is.na(rating), sqrt(mean((rating - pred)^2))]
+      
+      return(rmse)
+  }
+stopCluster(cl)
+
+rmse_u <- lapply(lambda_test, function(l){
+  #cross-validation method
+  
+  train <- 
+  test <-  
+  
+  u_bias <- sample_train[
+    , .(u_bias = sum(rating - g_mean)/(l + .N)), by = .(userId)]
+  
+  pred <- sample_test[u_bias, on = .(userId)][
+    , .(pred = u_bias + g_mean), by = .(userId)]
+  
+  rmse <- sample_test[pred, on = .(userId)][
+    !is.na(rating), sqrt(mean((rating - pred)^2))]
+  
+  return(rmse)
+})
+
+qplot(lambda_test, unlist(rmse_u), geom = c("point", "line"))
+lambda_u <- lambda_test[which.min(rmse_u)]
+
+lambda_test <- seq(0, 5, 0.1)
+
+rmse_m <- lapply(lambda_test, function(l){
   
   m_bias <- sample_train[u_bias, on = .(userId)][
     , .(m_bias = sum(rating - g_mean - u_bias)/(l + .N)), by = .(movieId)]
@@ -50,7 +100,7 @@ rmse <- lapply(lambda, function(l){
 })
 
 qplot(lambda, as.numeric(rmse), geom = c("point", "line"))
-lambda <- lambda[which.min(rmse)]
+lambda_m <- lambda[which.min(rmse)]
 
 rm(rmse)
 
@@ -163,7 +213,7 @@ sgd <- function(L_rate,epochs){
       q[,i[id]] <- q[,i[id]] - L_rate * nabla_q    
     }
     err_log <- t(p) %*% q - x_s 
-    learning_log[[t]] <- sqrt(mean(apply(err_log, 2, crossprod)))
+    learning_log[[t]] <- sqrt(sum(apply(err_log, 2, crossprod))/ncol(x_s))
   }
   return(learning_log[[which.min(learning_log)]])
 }
