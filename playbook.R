@@ -1,9 +1,9 @@
 library(tidyverse)
-library(caret)
 library(data.table)
+library(caret)
 library(Matrix)
 library(doParallel)
-library(ggplot2)
+
 
 #load the edx data from misc folder
 #create a sample out of edx, and make a pair of train/test sets  
@@ -28,6 +28,7 @@ rm(edx, edx_sample, ind, sample)
 #de-mean 
 #global mean
 g_mean <- mean(sample_train$rating)
+
 #user and movie biases with count regulation lambda_u and lambda_m respectively
 #tune the lambda by cross validation
 set.seed(0, sample.kind= "Rounding")
@@ -38,15 +39,18 @@ for(k in 1:5){
   train_cv[[k]] <- sample_train[-ind_cv[[k]],]
   test_cv[[k]] <- sample_train[ind_cv[[k]],]
 }
+rm(k, ind_cv)
 
-lambda_search <- seq(15, 23, 0.1) #guessing and reviewing with plotting
+#u_bias
+#guessing and reviewing with plotting
+lambda_search <- seq(5, 16, 0.1)
 #implement parallel computing to save time
-cl <- makePSOCKcluster(2)
+cl <- makePSOCKcluster(3)
 registerDoParallel(cl)
 ub_tune <- foreach(k = 1:5) %:% 
     foreach(l = lambda_search, 
             .combine = "c", 
-            .packages = c("data.table")) %dopar% {
+            .packages = "data.table") %dopar% {
       
       u_bias <- train_cv[[k]][
         , .(u_bias = sum(rating - g_mean)/(l + .N)), by = .(userId)]
@@ -61,74 +65,62 @@ stopCluster(cl)
 rm(cl) #always clear any established clusters after stopping, otherwise it will
 #cause error in starting the next foreach parallel
 
-#plot the results by facet_grid
-for(k in 1:5){
-  
-}
+#plot the results to search possible lambda_u
+ub_rmse <- as.data.table(t(sapply(ub_tune, c))) %>% 
+  setnames(., as.character(lambda_search))
+ub_rmse <- ub_rmse[, lapply(.SD, mean)]
+qplot(x = lambda_search, y = as.numeric(ub_rmse[1,]), 
+      geom = c("point", "line"))
+#try different ranges of lambda_search to find the bottom on plot
+lambda_u <- lambda_search[which.min(as.numeric(ub_rmse))]
+u_bias <- sample_train[
+  , .(u_bias = sum(rating - g_mean)/(lambda_u + .N)), 
+  by = .(userId)]
+rm(ub_rmse, ub_tune, lambda_search)
 
-rmse_u <- lapply(lambda_test, function(l){
-  #cross-validation method
-  
-  train <- 
-  test <-  
-  
-  u_bias <- sample_train[
-    , .(u_bias = sum(rating - g_mean)/(l + .N)), by = .(userId)]
-  
-  pred <- sample_test[u_bias, on = .(userId)][
-    , .(pred = u_bias + g_mean), by = .(userId)]
-  
-  rmse <- sample_test[pred, on = .(userId)][
-    !is.na(rating), sqrt(mean((rating - pred)^2))]
-  
-  return(rmse)
-})
+#m_bias (repeat the u_bias tuning method)
+lambda_search <- seq(1, 6, 0.1)
+cl <- makePSOCKcluster(3)
+registerDoParallel(cl)
+mb_tune <- foreach(k = 1:5) %:% 
+  foreach(l = lambda_search, 
+          .combine = "c",
+          .packages = "data.table") %dopar% {
+            
+      m_bias <- train_cv[[k]][u_bias, on = .(userId)][!is.na(rating),
+          .(m_bias = sum(rating - g_mean - u_bias)/(l + .N)), 
+          by = .(movieId)]
+      
+      pred <- test_cv[[k]][u_bias, on = .(userId)][
+          m_bias, on = .(movieId)][!is.na(rating),
+          .(pred = u_bias + m_bias + g_mean), 
+          by = .(userId, movieId)]
+      
+      rmse <- test_cv[[k]][pred, on = .(userId, movieId)][
+        , sqrt(mean((rating - pred)^2))]
+      }
+stopCluster(cl)
+rm(cl)
 
-qplot(lambda_test, unlist(rmse_u), geom = c("point", "line"))
-lambda_u <- lambda_test[which.min(rmse_u)]
+mb_rmse <- as.data.table(t(sapply(mb_tune, c))) %>% 
+  setnames(., as.character(lambda_search))
+mb_rmse <- mb_rmse[, lapply(.SD, mean)]
+qplot(x = lambda_search, y = as.numeric(mb_rmse[1,]), 
+      geom = c("point", "line"))
+lambda_m <- lambda_search[which.min(mb_rmse)]
+m_bias <- sample_train[u_bias, on = .(userId)][!is.na(rating), 
+            .(m_bias = sum(rating - g_mean - u_bias)/(lambda_m + .N)), 
+            by = .(movieId)]
+rm(mb_tune, mb_rmse, lambda_search)
 
-lambda_test <- seq(0, 5, 0.1)
-
-rmse_m <- lapply(lambda_test, function(l){
-  
-  m_bias <- sample_train[u_bias, on = .(userId)][
-    , .(m_bias = sum(rating - g_mean - u_bias)/(l + .N)), by = .(movieId)]
-  
-  pred <- sample_test[u_bias, on = .(userId)][
-    m_bias, on = .(movieId)][
-      !is.na(rating), .(pred = u_bias + m_bias + g_mean), by = .(userId, movieId)]
-  
-  rmse <- sample_test[pred, on = .(userId, movieId)][
-    , sqrt(mean((rating - pred)^2))]
-  
-  return(rmse)
-})
-
-qplot(lambda, as.numeric(rmse), geom = c("point", "line"))
-lambda_m <- lambda[which.min(rmse)]
-
-rm(rmse)
-
-#latent factor in sgd
+#latent factors by sgd
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
-residual_train <- function(l){
-  
-  m_bias <- sample_train[u_bias, on = .(userId)][
-    , .(m_bias = sum(rating - g_mean - u_bias)/(l + .N)), by = .(movieId)]
-  
-  est <- sample_train[u_bias, on = .(userId)][
-    m_bias, on = .(movieId)][
-      , .(est = u_bias + m_bias + g_mean), by = .(userId, movieId)]
-  
-  resid <- sample_train[est, on = .(userId, movieId)][
-    , .(resid = rating - est), by = .(userId, movieId)]
-  
-  return(list(resid, m_bias))
-}
-
-m_bias <- residual_train(lambda)[[2]]
-temp_resid <- residual_train(lambda)[[1]]
-rtable <- dcast(temp_resid, userId ~ movieId, value.var = "resid")
+residual_train <- sample_train[u_bias, on = .(userId)][
+                          m_bias, on = .(movieId)][
+                            , .(resid = g_mean + u_bias + m_bias - rating), 
+                            by = .(userId, movieId)]
+#????cv needed
+rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
 
 #?inspect temp_resid$V1 to decide the starting P,Q matrix distribution
