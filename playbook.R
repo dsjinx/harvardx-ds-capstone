@@ -119,7 +119,8 @@ residual_train <- sample_train[u_bias, on = .(userId)][
                           m_bias, on = .(movieId)][
                             , .(resid = g_mean + u_bias + m_bias - rating), 
                             by = .(userId, movieId)]
-ot <- sum(residual_train$resid == 0) #check overfittings 
+of <- sum(residual_train$resid == 0) #check overfittings 
+rm(of)
 
 #QQ plot to check the distribution
 r_mean <- residual_train[, mean(resid)]
@@ -129,7 +130,7 @@ r_quantile <- residual_train[, quantile(resid, p)]
 n_quantile <- qnorm(p, r_mean, r_sd)
 qplot(n_quantile, r_quantile) + geom_abline()
 
-rm(residual_train, p, temp_resid)
+rm(p, r_quantile, n_quantile)
 
 #sgd
 #the about normal distribution of residual to allow us making an normal 
@@ -146,25 +147,29 @@ resid_i <- rtable_sparse@i + 1 #row index of resid (user)
 #col index of resid (movie)
 resid_j <- rep(1:rtable_sparse@Dim[2], diff(rtable_sparse@p)) 
 
-rm(rtable, id_NA)
+rm(rtable)
 
 #warm start P Q matrix for sgd
-k <- 10
+k <- 200
+f_mean <- sqrt(r_mean/k)
+f_sd<- r_sd/sqrt(k) #by LNN
 set.seed(0, sample.kind = "Rounding")
-P <- matrix(rnorm(k*rtable_sparse@Dim[1], r_mean, r_sd), nrow =  k)
+P <- matrix(rnorm(k*rtable_sparse@Dim[1], f_mean, f_sd), nrow =  k)
 set.seed(0, sample.kind = "Rounding")
-Q <- matrix(rnorm(k*rtable_sparse@Dim[2], r_mean, r_sd), nrow =  k)
+Q <- matrix(rnorm(k*rtable_sparse@Dim[2], f_mean, f_sd), nrow =  k)
 #??any 0 rows cols, should not, otherwise the corresponding u,i should not be in the table
 
-sgd <- function(P, Q, y, L_rate, lambda_q, lambda_p, batch_size, epochs){
+sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
   #y: resid to be trained on (rtable_sparse in dgCMatrix sparse format)
   #lambda_p/q: not tuned, try 
   #batch_size: sample size out of total number of training resid 
+  #batch_size * epochs should be much larger than length(y) 
   r <- y
   n <- length(y) #number of training resid
   u <- resid_i #row index (userid) of 
   i <- resid_j #ratings in dense format column index
-
+  learning_log <- list()
+  
   for (t in 1:epochs){
     
     batch_id <- sample(1:n, batch_size, replace = FALSE)
@@ -175,12 +180,28 @@ sgd <- function(P, Q, y, L_rate, lambda_q, lambda_p, batch_size, epochs){
         nabla_p <- err_ui * Q[,i[ui]] + lambda_p * P[,u[ui]]
         nabla_q <- err_ui * P[,u[ui]] + lambda_q * Q[,i[ui]]
         
-        P[,u[ui]] <- P[,u[ui]] - L_rate * p_grad
-        Q[,i[ui]] <- Q[,i[ui]] - L_rate * q_grad
+        P[,u[ui]] <- P[,u[ui]] - L_rate * nabla_p
+        Q[,i[ui]] <- Q[,i[ui]] - L_rate * nabla_p
     }
-  
+    
+    err_sq <- c()
+    err <- sapply(1:n, function(j){
+      P[,u[j]] %*% Q[,i[j]] - r[j]
+      })
+    err_sq <- append(err_sq, err^2)
+    
+    learning_log[[t]] <- sqrt(mean((err_sq)))
+    rm(err_sq, err)
   }
+  return(learning_log)
 }
+
+learning_result <- sgd(P = P, Q = Q , y = resids, 
+                       L_rate = 0.3, lambda_p = 0.02, lambda_q = 0.02, 
+                       batch_size = 30, epochs = 500)
+learning_result <- unlist(learning_result)
+qplot(x = c(1:500), y = learning_result)
+rm(learning_result) #clean before restart
 
 rmse_sgd <- function(P, Q, y){
   err_sq <- c()
