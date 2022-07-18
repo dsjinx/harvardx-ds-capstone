@@ -197,43 +197,38 @@ sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
 }
 
 learning_result <- sgd(P = P, Q = Q , y = resids, 
-                       L_rate = 0.3, lambda_p = 0.02, lambda_q = 0.02, 
+                       L_rate = 0.3, lambda_p = 0.3, lambda_q = 0.3, 
                        batch_size = 30, epochs = 500)
 learning_result <- unlist(learning_result)
 qplot(x = c(1:500), y = learning_result)
 rm(learning_result) #clean before restart
 
-rmse_sgd <- function(P, Q, y){
-  err_sq <- c()
-  
-    for (i in length(y)){
-      err <- c(P[,resid_i[i]] %*% Q[,resid_j[i]] - y[i])
-      err_sq <- append(err_sqrt, err^2)
-    }
-  sqrt(mean(err_sq))
-}
+#final validation
+#reconstruct the resids_learnt from trained P, Q
+resids_learnt <- t(P) %*% Q 
+#?? instead name the P,Q and picking corresponding r_ui in prediction
 
-##?? parallise RMSE
-#err_resid <- t(P) %*% Q - rtable
-#rmse_learning <- sqrt(mean(t(err_resid)%*%err_resid))
-#sgd template tested working
-sgd <- function(L_rate,epochs){
-  
-  learning_log <- list()
-  
-  for ( t in 1:epochs){
-    
-    ids <- sample(1:length(x_s@x), 1)
-    
-    for (id in ids){
-      err <- c(p[,u[id]] %*% q[,i[id]] - x_s[id])
-      nabla_p <- err * q[, i[id]] + 1 * p[,u[id]]
-      nabla_q <- err * p[, u[id]] + 1 * q[,i[id]]  
-      p[,u[id]] <- p[,u[id]] - L_rate * nabla_p
-      q[,i[id]] <- q[,i[id]] - L_rate * nabla_q    
-    }
-    err_log <- t(p) %*% q - x_s 
-    learning_log[[t]] <- sqrt(sum(apply(err_log, 2, crossprod))/ncol(x_s))
-  }
-  return(learning_log[[which.min(learning_log)]])
-}
+P <- as.data.frame(P) %>% setNames(u_id)
+setDT(P)
+Q <- as.data.frame(Q) %>% setNames(m_id)
+setDT(Q)
+
+pred <- sample_test[u_bias, on = .(userId)][m_bias, on = .(movieId)][
+                    , .(pred = g_mean + u_bias + m_bias), 
+                    by = .(userId, movieId)]
+
+cl <- makePSOCKcluster(3)
+registerDoParallel(cl) 
+pred_resids <- foreach(i = 1:length(pred$userId), 
+                       .combine = "c", 
+                       .packages = "data.table") %dopar% {
+                        resids <- P[,pred[1,i]] %*% Q[,pred[2,i]]
+                      }
+stopCluster(cl)
+rm(cl)
+
+pred <- pred[, resid := pred_resids]
+err_rmse <- sample_test[pred, on = .(userId, movieId)][
+                        , .(err = pred + resid - rating), 
+                        by = .(userId, movieId)]
+sqrt(mean(err_rmse$err * err_rmse$err))
