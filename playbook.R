@@ -157,7 +157,6 @@ set.seed(0, sample.kind = "Rounding")
 P <- matrix(rnorm(k*rtable_sparse@Dim[1], f_mean, f_sd), nrow = k)
 set.seed(0, sample.kind = "Rounding")
 Q <- matrix(rnorm(k*rtable_sparse@Dim[2], f_mean, f_sd), nrow = k)
-#??any 0 rows cols, should not, otherwise the corresponding u,i should not be in the table
 
 sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
   #y: resid to be trained on (rtable_sparse in dgCMatrix sparse format)
@@ -202,7 +201,7 @@ rm(learning_result) #clean before restart
 P <- as.data.frame(P) %>% setNames(u_id)
 Q <- as.data.frame(Q) %>% setNames(m_id[-1])
 
-rmse <- function(P, Q, valid){
+rmse <- function(g_mean, u_bias, m_bias, P, Q, valid){
             
             pred <- valid[u_bias, on = .(userId)][
                                 m_bias, on = .(movieId)][!is.na(rating), 
@@ -227,4 +226,4 @@ rmse <- function(P, Q, valid){
                                     , .(err = pred + resid - rating), 
                                     by = .(userId, movieId)]
             return(sqrt(mean(err_rmse$err * err_rmse$err)))
-          }
+        }
