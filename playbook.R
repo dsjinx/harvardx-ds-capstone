@@ -73,9 +73,8 @@ qplot(x = lambda_search, y = as.numeric(ub_rmse[1,]),
       geom = c("point", "line"))
 #try different ranges of lambda_search to find the bottom on plot
 lambda_u <- lambda_search[which.min(as.numeric(ub_rmse))]
-u_bias <- sample_train[
-  , .(u_bias = sum(rating - g_mean)/(lambda_u + .N)), 
-  by = .(userId)]
+u_bias <- sample_train[, .(u_bias = sum(rating - g_mean)/(lambda_u + .N)), 
+                        by = .(userId)]
 rm(ub_rmse, ub_tune, lambda_search)
 
 #m_bias (repeat the u_bias tuning method)
@@ -137,7 +136,8 @@ rm(p, r_quantile, n_quantile)
 #assumption, under which we can initialise the P U for sgd learning
 rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
-u_id <- rtable[,1] 
+u_id <- as.character(unlist(rtable[,1])) #turn a data table into strings, 
+                  #since the fundamental structure of data table is list
 m_id <- names(rtable) #reserve for future use, may not need????
 rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
 #change all NA to 0
@@ -150,13 +150,13 @@ resid_j <- rep(1:rtable_sparse@Dim[2], diff(rtable_sparse@p))
 rm(rtable)
 
 #warm start P Q matrix for sgd
-k <- 200
+k <- 60
 f_mean <- sqrt(r_mean/k)
 f_sd<- r_sd/sqrt(k) #by LNN
 set.seed(0, sample.kind = "Rounding")
-P <- matrix(rnorm(k*rtable_sparse@Dim[1], f_mean, f_sd), nrow =  k)
+P <- matrix(rnorm(k*rtable_sparse@Dim[1], f_mean, f_sd), nrow = k)
 set.seed(0, sample.kind = "Rounding")
-Q <- matrix(rnorm(k*rtable_sparse@Dim[2], f_mean, f_sd), nrow =  k)
+Q <- matrix(rnorm(k*rtable_sparse@Dim[2], f_mean, f_sd), nrow = k)
 #??any 0 rows cols, should not, otherwise the corresponding u,i should not be in the table
 
 sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
@@ -166,8 +166,6 @@ sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
   #batch_size * epochs should be much larger than length(y) 
   r <- y
   n <- length(y) #number of training resid
-  u <- resid_i #row index (userid) of 
-  i <- resid_j #ratings in dense format column index
   learning_log <- list()
   
   for (t in 1:epochs){
@@ -176,31 +174,28 @@ sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
     
     for (ui in batch_id){
         
-        err_ui <- c(P[,u[ui]] %*% Q[,i[ui]] - r[ui]) 
-        nabla_p <- err_ui * Q[,i[ui]] + lambda_p * P[,u[ui]]
-        nabla_q <- err_ui * P[,u[ui]] + lambda_q * Q[,i[ui]]
+        err_ui <- c(P[,resid_i[ui]] %*% Q[,resid_j[ui]] - r[ui]) 
+        nabla_p <- err_ui * Q[,resid_j[ui]] + lambda_p * P[,resid_i[ui]]
+        nabla_q <- err_ui * P[,resid_i[ui]] + lambda_q * Q[,resid_j[ui]]
         
-        P[,u[ui]] <- P[,u[ui]] - L_rate * nabla_p
-        Q[,i[ui]] <- Q[,i[ui]] - L_rate * nabla_p
+        P[,resid_i[ui]] <- P[,resid_i[ui]] - L_rate * nabla_p
+        Q[,resid_j[ui]] <- Q[,resid_j[ui]] - L_rate * nabla_q
     }
     
-    err_sq <- c()
     err <- sapply(1:n, function(j){
-      P[,u[j]] %*% Q[,i[j]] - r[j]
+      P[,resid_i[j]] %*% Q[,resid_j[j]] - r[j]
       })
-    err_sq <- append(err_sq, err^2)
-    
-    learning_log[[t]] <- sqrt(mean((err_sq)))
-    rm(err_sq, err)
+    learning_log[[t]] <- sqrt(mean(err^2))
+    rm(err)
   }
   return(learning_log)
 }
 
 learning_result <- sgd(P = P, Q = Q , y = resids, 
                        L_rate = 0.3, lambda_p = 0.3, lambda_q = 0.3, 
-                       batch_size = 30, epochs = 500)
+                       batch_size = 30, epochs = 1500)
 learning_result <- unlist(learning_result)
-qplot(x = c(1:500), y = learning_result)
+qplot(x = c(1:1500), y = learning_result)
 rm(learning_result) #clean before restart
 
 #final validation
@@ -209,20 +204,20 @@ resids_learnt <- t(P) %*% Q
 #?? instead name the P,Q and picking corresponding r_ui in prediction
 
 P <- as.data.frame(P) %>% setNames(u_id)
-setDT(P)
-Q <- as.data.frame(Q) %>% setNames(m_id)
-setDT(Q)
+Q <- as.data.frame(Q) %>% setNames(m_id[-1])
 
 pred <- sample_test[u_bias, on = .(userId)][m_bias, on = .(movieId)][
-                    , .(pred = g_mean + u_bias + m_bias), 
+                    !is.na(rating), .(pred = g_mean + u_bias + m_bias), 
                     by = .(userId, movieId)]
+pred_uid <- as.character(unlist(pred[,1]))
+pred_mid <- as.character(unlist(pred[,2]))
 
 cl <- makePSOCKcluster(3)
 registerDoParallel(cl) 
 pred_resids <- foreach(i = 1:length(pred$userId), 
                        .combine = "c", 
                        .packages = "data.table") %dopar% {
-                        resids <- P[,pred[1,i]] %*% Q[,pred[2,i]]
+                        resids <- P[,pred_uid[i]] %*% Q[,pred_mid[i]]
                       }
 stopCluster(cl)
 rm(cl)
