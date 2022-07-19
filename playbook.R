@@ -192,38 +192,39 @@ sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
 }
 
 learning_result <- sgd(P = P, Q = Q , y = resids, 
-                       L_rate = 0.3, lambda_p = 0.3, lambda_q = 0.3, 
+                       L_rate = 1.5, lambda_p = 0.3, lambda_q = 0.3, 
                        batch_size = 30, epochs = 1500)
 learning_result <- unlist(learning_result)
 qplot(x = c(1:1500), y = learning_result)
 rm(learning_result) #clean before restart
 
-#final validation
-#reconstruct the resids_learnt from trained P, Q
-resids_learnt <- t(P) %*% Q 
-#?? instead name the P,Q and picking corresponding r_ui in prediction
-
+#validation
 P <- as.data.frame(P) %>% setNames(u_id)
 Q <- as.data.frame(Q) %>% setNames(m_id[-1])
 
-pred <- sample_test[u_bias, on = .(userId)][m_bias, on = .(movieId)][
-                    !is.na(rating), .(pred = g_mean + u_bias + m_bias), 
-                    by = .(userId, movieId)]
-pred_uid <- as.character(unlist(pred[,1]))
-pred_mid <- as.character(unlist(pred[,2]))
+rmse <- function(P, Q, valid){
+            
+            pred <- valid[u_bias, on = .(userId)][
+                                m_bias, on = .(movieId)][!is.na(rating), 
+                                .(pred = g_mean + u_bias + m_bias), 
+                                by = .(userId, movieId)]
+            pred_uid <- as.character(unlist(pred[,1]))
+            pred_mid <- as.character(unlist(pred[,2]))
+            n <- length(pred$pred)
+            
+            cl <- makePSOCKcluster(3)
+            registerDoParallel(cl) 
+            pred_resids <- foreach(i = 1:n, 
+                                   .combine = "c", 
+                                   .packages = "data.table") %dopar% {
+                                    P[,pred_uid[i]] %*% Q[,pred_mid[i]]
+                                  }
+            stopCluster(cl)
+            rm(cl)
 
-cl <- makePSOCKcluster(3)
-registerDoParallel(cl) 
-pred_resids <- foreach(i = 1:length(pred$userId), 
-                       .combine = "c", 
-                       .packages = "data.table") %dopar% {
-                        resids <- P[,pred_uid[i]] %*% Q[,pred_mid[i]]
-                      }
-stopCluster(cl)
-rm(cl)
-
-pred <- pred[, resid := pred_resids]
-err_rmse <- sample_test[pred, on = .(userId, movieId)][
-                        , .(err = pred + resid - rating), 
-                        by = .(userId, movieId)]
-sqrt(mean(err_rmse$err * err_rmse$err))
+            pred <- pred[, resid := pred_resids]
+            err_rmse <- valid[pred, on = .(userId, movieId)][
+                                    , .(err = pred + resid - rating), 
+                                    by = .(userId, movieId)]
+            return(sqrt(mean(err_rmse$err * err_rmse$err)))
+          }
