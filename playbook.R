@@ -147,10 +147,10 @@ resid_i <- rtable_sparse@i + 1 #row index of resid (user)
 #col index of resid (movie)
 resid_j <- rep(1:rtable_sparse@Dim[2], diff(rtable_sparse@p)) 
 
-rm(rtable)
+rm(rtable, residual_train)
 
 #warm start P Q matrix for sgd
-k <- 60
+k <- 200
 f_mean <- sqrt(r_mean/k)
 f_sd<- r_sd/sqrt(k) #by LNN
 set.seed(0, sample.kind = "Rounding")
@@ -191,10 +191,10 @@ sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
 }
 
 learning_result <- sgd(P = P, Q = Q , y = resids, 
-                       L_rate = 1.5, lambda_p = 0.3, lambda_q = 0.3, 
-                       batch_size = 30, epochs = 1500)
+                       L_rate = 0.6, lambda_p = 0.3, lambda_q = 0.3, 
+                       batch_size = 30, epochs = 500)
 learning_result <- unlist(learning_result)
-qplot(x = c(1:1500), y = learning_result)
+qplot(x = c(1:500), y = learning_result)
 rm(learning_result) #clean before restart
 
 #validation
@@ -227,3 +227,6 @@ rmse <- function(g_mean, u_bias, m_bias, P, Q, valid){
                                     by = .(userId, movieId)]
             return(sqrt(mean(err_rmse$err * err_rmse$err)))
         }
+
+rmse(g_mean = g_mean, u_bias = u_bias, m_bias = m_bias, P = P, Q = Q, 
+     valid = sample_test)
