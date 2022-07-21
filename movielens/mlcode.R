@@ -4,9 +4,9 @@
 
 # Note: this process could take a couple of minutes
 
-#if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
-#if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
-#if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 
 library(tidyverse)
 library(caret)
@@ -26,9 +26,9 @@ movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::",
 colnames(movies) <- c("movieId", "title", "genres")
 
 # if using R 3.6 or earlier:
-#movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))[movieId],
-#                                           title = as.character(title),
-#                                           genres = as.character(genres))
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))[movieId],
+                                           title = as.character(title),
+                                           genres = as.character(genres))
 # if using R 4.0 or later:
 movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
                                            title = as.character(title),
@@ -54,13 +54,14 @@ edx <- rbind(edx, removed)
 
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
+#save the downloaded/prepared data in local drive, so we do not have to repeat the process,
+#if our system get crashed in the following work. 
+save(edx, file = "edx.rda")
+save(validation, file = "validation.rda")
+
 # Data exploration
 edx %>% tibble()
-edx[, .N, keyby = rating][order(-rating)]
-validation[, .N, keyby = rating][order(-rating)]
-# There is no "0" or NA rating.
-# Rating range is from 0.5 to 5.0, with increment of 0.5. 
 
-# Create a user*movie table rating table.
-r <- dcast(edx, userId ~ movieId, value.var = "rating")
-#?create a small sample to test sgd
+#global mean
+mu <- 
+
