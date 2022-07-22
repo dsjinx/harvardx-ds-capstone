@@ -1,5 +1,6 @@
 library(tidyverse)
 library(data.table)
+library(stringr)
 library(caret)
 library(Matrix)
 library(doParallel)
@@ -111,6 +112,22 @@ m_bias <- sample_train[u_bias, on = .(userId)][!is.na(rating),
             .(m_bias = sum(rating - g_mean - u_bias)/(lambda_m + .N)), 
             by = .(movieId)]
 rm(mb_tune, mb_rmse, lambda_search)
+
+#genres
+genres_cat <- str_split(sample_train$genres, "\\|") %>% unlist() %>% unique()
+n <- length(genres_cat)
+gen_mean <- lapply(1:n, function(n){
+                  sample_train[u_bias, on = .(userId)][
+                    m_bias, on = .(movieId)][
+                    genres %like% genres_cat[n],
+                    mean(g_mean + u_bias + m_bias - rating)]
+                  })
+gen_mean <- lapply(1:n, function(n){
+                  sample_train[genres %like% genres_cat[n],
+                               mean(rating)]})
+
+names(gen_mean) <- genres_cat
+
 
 #latent factors by sgd
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
