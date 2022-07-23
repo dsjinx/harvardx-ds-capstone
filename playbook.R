@@ -191,8 +191,8 @@ sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
     for (ui in batch_id){
         
         err_ui <- c(P[,resid_i[ui]] %*% Q[,resid_j[ui]] - r[ui]) 
-        nabla_p <- err_ui * Q[,resid_j[ui]] + lambda_p * P[,resid_i[ui]]
-        nabla_q <- err_ui * P[,resid_i[ui]] + lambda_q * Q[,resid_j[ui]]
+        nabla_p <- err_ui * Q[,resid_j[ui]] / n + lambda_p * P[,resid_i[ui]]
+        nabla_q <- err_ui * P[,resid_i[ui]] / n + lambda_q * Q[,resid_j[ui]]
         
         P[,resid_i[ui]] <- P[,resid_i[ui]] - L_rate * nabla_p
         Q[,resid_j[ui]] <- Q[,resid_j[ui]] - L_rate * nabla_q
