@@ -122,12 +122,14 @@ gen_mean <- lapply(1:n, function(n){
                     genres %like% genres_cat[n],
                     mean(g_mean + u_bias + m_bias - rating)]
                   })
-gen_mean <- lapply(1:n, function(n){
-                  sample_train[genres %like% genres_cat[n],
-                               mean(rating)]})
 
 names(gen_mean) <- genres_cat
 
+#use which + str_detect to create an augment gen_mean matrix for glmnet process
+#test
+gen_mean <- lapply(1:n, function(n){
+                  sample_train[genres %like% genres_cat[n],
+                               mean(rating)]})
 
 #latent factors by sgd
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
@@ -157,8 +159,9 @@ u_id <- as.character(unlist(rtable[,1])) #turn a data table into strings,
                   #since the fundamental structure of data table is list
 m_id <- names(rtable) #reserve for future use, may not need????
 rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
-#change all NA to 0
-rtable_sparse[is.na(rtable_sparse)] <- 0
+#replace all NA with 0 to make sparse
+replace_na(rtable_sparse, 0)
+#rtable_sparse[is.na(rtable_sparse)] <- 0
 resids <- rtable_sparse@x #training resid
 resid_i <- rtable_sparse@i + 1 #row index of resid (user) 
 #col index of resid (movie)
