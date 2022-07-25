@@ -4,6 +4,7 @@ library(stringr)
 library(caret)
 library(Matrix)
 library(doParallel)
+library(glmnet)
 
 
 #load the edx data from misc folder
@@ -114,16 +115,30 @@ m_bias <- sample_train[u_bias, on = .(userId)][!is.na(rating),
 rm(mb_tune, mb_rmse, lambda_search)
 
 #genres
-genres_cat <- str_split(sample_train$genres, "\\|") %>% unlist() %>% unique()
-n <- length(genres_cat)
+genres <- str_split(sample_train$genres, "\\|") 
+gen_cat <- genres %>% unlist() %>% unique()
+
+n <- length(gen_cat)
 gen_mean <- lapply(1:n, function(n){
                   sample_train[u_bias, on = .(userId)][
                     m_bias, on = .(movieId)][
-                    genres %like% genres_cat[n],
+                    genres %like% gen_cat[n],
                     mean(g_mean + u_bias + m_bias - rating)]
                   })
 
 names(gen_mean) <- genres_cat
+
+m_n <- uniqueN(sample_train$movieId)
+gen_n <- length(genres)
+ind <- vector(mode = "list", length = m_n)
+ind <- lapply(1:gen_n, function(n){
+          for(i in 1:length(genres[[n]])){
+              ind[[n]][i] <- str_which(genres_cat, genres[[n]][i])
+            }
+        })
+
+Gen <- matrix(rep(gen_mean, m_n), ncol = m_n)
+
 
 #use which + str_detect to create an augment gen_mean matrix for glmnet process
 #test
