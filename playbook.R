@@ -176,7 +176,7 @@ replace_na(rtable_sparse, 0)
 
 cl <- makePSOCKcluster(3)
 registerDoParallel(cl)
-fit <- cv.glmnet(gen, rtable_sparse, alpha = )
+fit <- cv.glmnet(gen, rtable_sparse, alpha = )# use caret with method = glment
 
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
