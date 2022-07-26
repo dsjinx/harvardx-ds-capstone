@@ -126,27 +126,25 @@ gen_mean <- lapply(1:n, function(n){
                     mean(g_mean + u_bias + m_bias - rating)]
                   })
 
-names(gen_mean) <- genres_cat
-
+names(gen_mean) <- gen_cat
+#parallise it!!!
 m_n <- uniqueN(sample_train$movieId)
 gen_n <- length(genres)
 ind <- vector(mode = "list", length = m_n)
 ind <- lapply(1:gen_n, function(n){
           for(i in 1:length(genres[[n]])){
               ind[[n]][i] <- str_which(genres_cat, genres[[n]][i])
-            }
+          }
         })
 
-Gen <- matrix(rep(gen_mean, m_n), ncol = m_n)
+gen <- data.frame(genres_cat)
+j <- 1
+gen <- while(j <= m_n){
+          gen <- cbind(gen, gen_mean)
+          gen_mean[-id[[j]]] <- 0
+          j <- j + 1
+}
 
-
-#use which + str_detect to create an augment gen_mean matrix for glmnet process
-#test
-gen_mean <- lapply(1:n, function(n){
-                  sample_train[genres %like% genres_cat[n],
-                               mean(rating)]})
-
-#latent factors by sgd
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
 residual_train <- sample_train[u_bias, on = .(userId)][
                           m_bias, on = .(movieId)][
@@ -165,8 +163,7 @@ qplot(n_quantile, r_quantile) + geom_abline()
 
 rm(p, r_quantile, n_quantile)
 
-#sgd
-#the about normal distribution of residual to allow us making an normal 
+#the almost normal distribution of residual to allow us making an normal 
 #assumption, under which we can initialise the P U for sgd learning
 rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
@@ -176,6 +173,10 @@ m_id <- names(rtable) #reserve for future use, may not need????
 rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
 #replace all NA with 0 to make sparse
 replace_na(rtable_sparse, 0)
+
+fit <- cv.glmnet()
+
+#sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
 resids <- rtable_sparse@x #training resid
 resid_i <- rtable_sparse@i + 1 #row index of resid (user) 
