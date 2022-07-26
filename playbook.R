@@ -174,7 +174,9 @@ rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
 #replace all NA with 0 to make sparse
 replace_na(rtable_sparse, 0)
 
-fit <- cv.glmnet()
+cl <- makePSOCKcluster(3)
+registerDoParallel(cl)
+fit <- cv.glmnet(gen, rtable_sparse, alpha = )
 
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
