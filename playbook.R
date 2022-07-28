@@ -128,7 +128,8 @@ gen_mean <- lapply(1:n, function(n){
 
 names(gen_mean) <- gen_cat
 #parallise it!!!
-m_n <- uniqueN(sample_train$movieId)
+m_id <- unique(sample_train$movieId)
+m_n <- length(m_id)
 gen_n <- length(genres)
 ind <- vector(mode = "list", length = m_n)
 ind <- lapply(1:gen_n, function(n){
@@ -137,6 +138,16 @@ ind <- lapply(1:gen_n, function(n){
           }
         })
 
+cl <- makePSOCKcluster(3)
+registerDoParallel(cl)
+ind <- foreach(g = 1:gen_n) %:% 
+          foreach(i = 1:length(genres[[g]]), .combine = "c", 
+                  .packages = "stringr") %dopar% {
+                  ind <- str_which(genres_cat, genres[[g]][i])
+          }
+stopCluster()
+rm(cl)
+
 gen <- data.frame(genres_cat)
 j <- 1
 gen <- while(j <= m_n){
@@ -144,6 +155,7 @@ gen <- while(j <= m_n){
           gen_mean[-id[[j]]] <- 0
           j <- j + 1
 }
+names(gen) <- c(gens, m_id)
 
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
 residual_train <- sample_train[u_bias, on = .(userId)][
@@ -169,7 +181,6 @@ rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
 u_id <- as.character(unlist(rtable[,1])) #turn a data table into strings, 
                   #since the fundamental structure of data table is list
-m_id <- names(rtable) #reserve for future use, may not need????
 rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
 #replace all NA with 0 to make sparse
 replace_na(rtable_sparse, 0)
