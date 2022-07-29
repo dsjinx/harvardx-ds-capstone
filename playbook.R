@@ -120,35 +120,26 @@ rm(n)
 
 m_id <- unique(sample_train$movieId)
 m_n <- length(m_id)
-m_gen <- fpreach(i = 1:5, ,packages = c("stringr", "data.table"), function(i){
-          str_split(sample_train[movieId == m_id[i], genres][1], "\\|") 
-          })
+m_gen <- foreach(i = 1:m_n, .packages = c("stringr", "data.table")) %dopar% {
+            gens <- sample_train[movieId == m_id[i], genres][1]          
+    
+            gens <- str_split(gens, "\\|") %>% unlist()
+            }
+names(m_gen) <- m_id
 
-gen_n <- length(genres)
-ind <- vector(mode = "list", length = m_n)
-ind <- lapply(1:gen_n, function(n){
-          for(i in 1:length(genres[[n]])){
-              ind[[n]][i] <- str_which(gen_cat, genres[[n]][i])
-          }
-        })
+ind <- foreach(g = 1:m_n) %dopar% {
+          foreach(i = 1:length(m_gen[[g]]), .combine = "c", 
+                  .packages = "stringr") %do% {
+                  ind <- str_which(gen_cat, m_gen[[g]][i])}
+        }
 
-cl <- makePSOCKcluster(3)
-registerDoParallel(cl)
-ind <- foreach(g = 1:gen_n) %:% 
-          foreach(i = 1:length(genres[[g]]), .combine = "c", 
-                  .packages = "stringr") %dopar% {
-                  ind <- str_which(genres_cat, genres[[g]][i])
-          }
-stopCluster(cl)
-rm(cl)
-
-gen <- data.frame(genres_cat)
+gen <- data.frame(gen_cat)
 j <- 1
 gen <- while(j <= m_n){
           gen <- cbind(gen, gen_mean)
-          gen_mean[-id[[j]]] <- 0
+          gen_mean[-ind[[j]]] <- 0
           j <- j + 1
-}
+          }
 names(gen) <- c(gens, m_id)
 
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
