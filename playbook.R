@@ -109,13 +109,14 @@ rm(mb_tune, mb_rmse, lambda_search)
 genres <- str_split(sample_train$genres, "\\|") 
 gen_cat <- genres %>% unlist() %>% unique()
 n <- length(gen_cat)
-gen_mean <- lapply(1:n, function(n){
+gen_mean <- foreach(g = 1:n, .combine = "c", 
+                    .packages = "data.table") %dopar% {
                   sample_train[u_bias, on = .(userId)][
                     m_bias, on = .(movieId)][
-                    genres %like% gen_cat[n],
+                    genres %like% gen_cat[g],
                     mean(g_mean + u_bias + m_bias - rating)]
-                  })
-names(gen_mean) <- gen_cat
+                  }
+#names(gen_mean) <- gen_cat
 rm(n)
 
 m_id <- unique(sample_train$movieId)
@@ -131,14 +132,12 @@ ind <- foreach(g = 1:m_n) %dopar% {
           foreach(i = 1:length(m_gen[[g]]), .combine = "c", 
                   .packages = "stringr") %do% {
                   ind <- str_which(gen_cat, m_gen[[g]][i])}
-        }
+              }
 
 gen <- data.frame(gen_cat)
-j <- 1
-gen <- while(j <= m_n){
+gen <- for(j in 1:m_n){
           gen <- cbind(gen, gen_mean)
-          gen_mean[-ind[[j]]] <- 0
-          j <- j + 1
+          gen[-ind[[1]], 1+1] <- 0
           }
 names(gen) <- c(gens, m_id)
 
