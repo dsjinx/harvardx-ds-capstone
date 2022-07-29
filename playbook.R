@@ -47,8 +47,7 @@ rm(k, ind_cv)
 #guessing and reviewing with plotting
 lambda_search <- seq(5, 16, 0.1)
 #implement parallel computing to save time
-cl <- makePSOCKcluster(3)
-registerDoParallel(cl)
+registerDoParallel(cores = 3)
 ub_tune <- foreach(k = 1:5) %:% 
     foreach(l = lambda_search, 
             .combine = "c", 
@@ -63,9 +62,6 @@ ub_tune <- foreach(k = 1:5) %:%
       rmse <- test_cv[[k]][pred, on = .(userId)][
         !is.na(rating), sqrt(mean((rating - pred)^2))]
       }
-stopCluster(cl) 
-rm(cl) #always clear any established clusters after stopping, otherwise it will
-#cause error in starting the next foreach parallel
 
 #plot the results to search possible lambda_u
 ub_rmse <- as.data.table(t(sapply(ub_tune, c))) %>% 
@@ -145,7 +141,7 @@ ind <- foreach(g = 1:gen_n) %:%
                   .packages = "stringr") %dopar% {
                   ind <- str_which(genres_cat, genres[[g]][i])
           }
-stopCluster()
+stopCluster(cl)
 rm(cl)
 
 gen <- data.frame(genres_cat)
