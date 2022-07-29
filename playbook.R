@@ -77,13 +77,10 @@ rm(ub_rmse, ub_tune, lambda_search)
 
 #m_bias (repeat the u_bias tuning method)
 lambda_search <- seq(1, 6, 0.1)
-cl <- makePSOCKcluster(3)
-registerDoParallel(cl)
 mb_tune <- foreach(k = 1:5) %:% 
   foreach(l = lambda_search, 
           .combine = "c",
           .packages = "data.table") %dopar% {
-            
       m_bias <- train_cv[[k]][u_bias, on = .(userId)][!is.na(rating),
           .(m_bias = sum(rating - g_mean - u_bias)/(l + .N)), 
           by = .(movieId)]
@@ -96,8 +93,6 @@ mb_tune <- foreach(k = 1:5) %:%
       rmse <- test_cv[[k]][pred, on = .(userId, movieId)][
         , sqrt(mean((rating - pred)^2))]
       }
-stopCluster(cl)
-rm(cl)
 
 mb_rmse <- as.data.table(t(sapply(mb_tune, c))) %>% 
   setnames(., as.character(lambda_search))
@@ -113,7 +108,6 @@ rm(mb_tune, mb_rmse, lambda_search)
 #genres
 genres <- str_split(sample_train$genres, "\\|") 
 gen_cat <- genres %>% unlist() %>% unique()
-
 n <- length(gen_cat)
 gen_mean <- lapply(1:n, function(n){
                   sample_train[u_bias, on = .(userId)][
@@ -121,16 +115,20 @@ gen_mean <- lapply(1:n, function(n){
                     genres %like% gen_cat[n],
                     mean(g_mean + u_bias + m_bias - rating)]
                   })
-
 names(gen_mean) <- gen_cat
-#parallise it!!!
+rm(n)
+
 m_id <- unique(sample_train$movieId)
 m_n <- length(m_id)
+m_gen <- fpreach(i = 1:5, ,packages = c("stringr", "data.table"), function(i){
+          str_split(sample_train[movieId == m_id[i], genres][1], "\\|") 
+          })
+
 gen_n <- length(genres)
 ind <- vector(mode = "list", length = m_n)
 ind <- lapply(1:gen_n, function(n){
           for(i in 1:length(genres[[n]])){
-              ind[[n]][i] <- str_which(genres_cat, genres[[n]][i])
+              ind[[n]][i] <- str_which(gen_cat, genres[[n]][i])
           }
         })
 
