@@ -135,19 +135,21 @@ ind <- foreach(g = 1:m_n) %dopar% {
               }
 
 gen <- data.frame(gen_cat)
-gen <- for(j in 1:m_n){
-          gen <- cbind(gen, gen_mean)
-          gen[-ind[[1]], 1+1] <- 0
-          }
-names(gen) <- c(gens, m_id)
+j <- 1
+while(j <= m_n){
+      gen[, j+1] <- gen_mean
+      gen[-ind[[j]], j+1] <- 0
+      j <- j + 1
+      }
+colnames(gen)[-1] <- m_id
+rm(j)
 
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
 residual_train <- sample_train[u_bias, on = .(userId)][
                           m_bias, on = .(movieId)][
                             , .(resid = g_mean + u_bias + m_bias - rating), 
                             by = .(userId, movieId)]
-of <- sum(residual_train$resid == 0) #check overfittings 
-rm(of)
+sum(residual_train$resid == 0) #check overfittings 
 
 #QQ plot to check the distribution
 r_mean <- residual_train[, mean(resid)]
