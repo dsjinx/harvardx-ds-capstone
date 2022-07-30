@@ -122,8 +122,7 @@ rm(n)
 m_id <- unique(sample_train$movieId)
 m_n <- length(m_id)
 m_gen <- foreach(i = 1:m_n, .packages = c("stringr", "data.table")) %dopar% {
-            gens <- sample_train[movieId == m_id[i], genres][1]          
-    
+            gens <- sample_train[movieId == m_id[i], genres][1] 
             gens <- str_split(gens, "\\|") %>% unlist()
             }
 names(m_gen) <- m_id
@@ -151,8 +150,8 @@ residual_train <- sample_train[u_bias, on = .(userId)][
                             by = .(userId, movieId)]
 sum(residual_train$resid == 0) #check overfittings 
 
-m_id_dt <- data.table(movieId = m_id)
-residual_train <- residual_train[m_id_dt, on = .(movieId)]
+
+#residual_train <- residual_train[m_id_dt, on = .(movieId)]
 
 #QQ plot to check the distribution
 r_mean <- residual_train[, mean(resid)]
@@ -166,7 +165,12 @@ rm(p, r_quantile, n_quantile)
 rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
 u_id <- rtable[, 1]
-
+movieId <- names(rtable[,-1])
+rtable_t <- transpose(rtable[,-1], keep.names = "movieId")
+rtable_t$movieId <- as.numeric(rtable_t$movieId)
+m_id_dt <- data.table(movieId = m_id)
+rtable_t <- rtable_t[m_id_dt, on = .(movieId)]
+rtable <- #reverse tr back
 
 rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
 #replace all NA with 0 to make sparse
