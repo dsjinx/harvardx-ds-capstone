@@ -151,6 +151,9 @@ residual_train <- sample_train[u_bias, on = .(userId)][
                             by = .(userId, movieId)]
 sum(residual_train$resid == 0) #check overfittings 
 
+m_id_dt <- data.table(movieId = m_id)
+residual_train <- residual_train[m_id_dt, on = .(movieId)]
+
 #QQ plot to check the distribution
 r_mean <- residual_train[, mean(resid)]
 r_sd <- residual_train[, sd(resid)]
@@ -158,15 +161,13 @@ p <- seq(0.05, 0.95, 0.05)
 r_quantile <- residual_train[, quantile(resid, p)]
 n_quantile <- qnorm(p, r_mean, r_sd)
 qplot(n_quantile, r_quantile) + geom_abline()
-
 rm(p, r_quantile, n_quantile)
 
-#the almost normal distribution of residual to allow us making an normal 
-#assumption, under which we can initialise the P U for sgd learning
 rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
-u_id <- as.character(unlist(rtable[,1])) #turn a data table into strings, 
-                  #since the fundamental structure of data table is list
+u_id <- rtable[, 1]
+
+
 rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
 #replace all NA with 0 to make sparse
 replace_na(rtable_sparse, 0)
