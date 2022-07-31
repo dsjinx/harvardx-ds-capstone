@@ -173,14 +173,14 @@ m_id_dt <- data.table(movieId = m_id)
 rtable_tr <- rtable_tr[m_id_dt, on = .(movieId)]
 rtable <- transpose(rtable_tr, keep.names = "u_id", 
                     make.names = "movieId")
-rtable(rtable_tr)
+rm(rtable_tr)
 
-rtable_sp <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
-#replace all NA with 0 to make sparse
-replace_na(rtable_sp, 0)
+rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
+rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
+gen_x <- setnafill(gen[,-1], type = "const", fill = 0)
+gen_x <- as(as.matrix(gen_x), "sparseMatrix")
 
-# ??use caret with method = glment
-fit <- cv.glmnet(gen, rtable_sparse, family = "mgaussian", 
+fit <- cv.glmnet(gen_x, rtable_y, family = "mgaussian", 
                  type.measure = "mse", nfolds = 5, alpha = 0.5, 
                  parallel = TRUE, trace.it = TRUE)
 #clean env vars rm()
