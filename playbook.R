@@ -41,6 +41,7 @@ for(k in 1:5){
   train_cv[[k]] <- sample_train[-ind_cv[[k]],]
   test_cv[[k]] <- sample_train[ind_cv[[k]],]
 }
+
 rm(k, ind_cv)
 
 #u_bias
@@ -73,6 +74,7 @@ qplot(x = lambda_search, y = as.numeric(ub_rmse[1,]),
 lambda_u <- lambda_search[which.min(as.numeric(ub_rmse))]
 u_bias <- sample_train[, .(u_bias = sum(rating - g_mean)/(lambda_u + .N)), 
                         by = .(userId)]
+
 rm(ub_rmse, ub_tune, lambda_search)
 
 #m_bias (repeat the u_bias tuning method)
@@ -103,7 +105,8 @@ lambda_m <- lambda_search[which.min(mb_rmse)]
 m_bias <- sample_train[u_bias, on = .(userId)][!is.na(rating), 
             .(m_bias = sum(rating - g_mean - u_bias)/(lambda_m + .N)), 
             by = .(movieId)]
-rm(mb_tune, mb_rmse, lambda_search)
+
+rm(mb_tune, mb_rmse, lambda_search, lambda_m, lambda_u, train_cv, test_cv)
 
 #genres
 genres <- str_split(sample_train$genres, "\\|") 
@@ -116,7 +119,7 @@ gen_mean <- foreach(g = 1:n, .combine = "c",
                     genres %like% gen_cat[g],
                     mean(g_mean + u_bias + m_bias - rating)]
                   }
-#names(gen_mean) <- gen_cat
+
 rm(n)
 
 m_id <- unique(sample_train$movieId)
@@ -141,7 +144,8 @@ while(j <= m_n){
       j <- j + 1
       }
 colnames(gen)[-1] <- m_id
-rm(j)
+
+rm(j, genres, ind, m_gen, gen_cat, gen_mean, m_n)
 
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
 residual_train <- sample_train[u_bias, on = .(userId)][
@@ -160,6 +164,7 @@ p <- seq(0.05, 0.95, 0.05)
 r_quantile <- residual_train[, quantile(resid, p)]
 n_quantile <- qnorm(p, r_mean, r_sd)
 qplot(n_quantile, r_quantile) + geom_abline()
+
 rm(p, r_quantile, n_quantile)
 
 rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
@@ -172,13 +177,14 @@ rtable_tr$movieId <- as.numeric(rtable_tr$movieId)
 m_id_dt <- data.table(movieId = m_id)
 rtable <- rtable_tr[m_id_dt, on = .(movieId)]
 
-rm(rtable_tr)
+rm(rtable_tr, movieId)
 
 rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
 gen_x <- setnafill(gen[,-1], type = "const", fill = 0)
 gen_x <- as(as.matrix(gen_x), "sparseMatrix")
 gen_x <- t(gen_x)
+
 #!!!!!dim(y)[1] == dim(x)[1], whcih is contrast to doc!!!!
 fit <- cv.glmnet(gen_x, rtable_y, family = "mgaussian", 
                  type.measure = "mse", nfolds = 5, alpha = 0.5, 
