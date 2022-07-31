@@ -179,8 +179,8 @@ rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
 gen_x <- setnafill(gen[,-1], type = "const", fill = 0)
 gen_x <- as(as.matrix(gen_x), "sparseMatrix")
-
-fit <- cv.glmnet(gen_x, rtable_y, family = "mgaussian", 
+#!!!!!dim(y)[1] == dim(x)[1], whcih is contrast to doc!!!!
+fit <- cv.glmnet(t(gen_x), t(rtable_y), family = "mgaussian", 
                  type.measure = "mse", nfolds = 5, alpha = 0.5, 
                  parallel = TRUE, trace.it = TRUE)
 #clean env vars rm()
