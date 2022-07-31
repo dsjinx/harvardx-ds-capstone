@@ -166,24 +166,24 @@ rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
 u_id <- rtable[, 1]
 movieId <- names(rtable[,-1])
-rtable_t <- transpose(rtable[,-1], keep.names = "movieId")
-rtable_t$movieId <- as.numeric(rtable_t$movieId)
+rtable_tr <- transpose(rtable, keep.names = "movieId", 
+                      make.names = "userId")
+rtable_tr$movieId <- as.numeric(rtable_tr$movieId)
 m_id_dt <- data.table(movieId = m_id)
-rtable_t <- rtable_t[m_id_dt, on = .(movieId)]
-rtable <- #reverse tr back
+rtable_tr <- rtable_tr[m_id_dt, on = .(movieId)]
+rtable <- transpose(rtable_tr, keep.names = "u_id", 
+                    make.names = "movieId")
+rtable(rtable_tr)
 
-rtable_sparse <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
+rtable_sp <- as(as.matrix(rtable[,-1]), "sparseMatrix") #exclude userId
 #replace all NA with 0 to make sparse
-replace_na(rtable_sparse, 0)
+replace_na(rtable_sp, 0)
 
 # ??use caret with method = glment
-cl <- makePSOCKcluster(3)
-registerDoParallel(cl)
 fit <- cv.glmnet(gen, rtable_sparse, family = "mgaussian", 
                  type.measure = "mse", nfolds = 5, alpha = 0.5, 
                  parallel = TRUE, trace.it = TRUE)
-stopCluster(cl)
-rm(cl)
+#clean env vars rm()
 
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
