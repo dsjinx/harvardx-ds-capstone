@@ -170,17 +170,17 @@ rtable_tr <- transpose(rtable, keep.names = "movieId",
                       make.names = "userId")
 rtable_tr$movieId <- as.numeric(rtable_tr$movieId)
 m_id_dt <- data.table(movieId = m_id)
-rtable_tr <- rtable_tr[m_id_dt, on = .(movieId)]
-rtable <- transpose(rtable_tr, keep.names = "u_id", 
-                    make.names = "movieId")
+rtable <- rtable_tr[m_id_dt, on = .(movieId)]
+
 rm(rtable_tr)
 
 rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
 gen_x <- setnafill(gen[,-1], type = "const", fill = 0)
 gen_x <- as(as.matrix(gen_x), "sparseMatrix")
+gen_x <- t(gen_x)
 #!!!!!dim(y)[1] == dim(x)[1], whcih is contrast to doc!!!!
-fit <- cv.glmnet(t(gen_x), t(rtable_y), family = "mgaussian", 
+fit <- cv.glmnet(gen_x, rtable_y, family = "mgaussian", 
                  type.measure = "mse", nfolds = 5, alpha = 0.5, 
                  parallel = TRUE, trace.it = TRUE)
 #clean env vars rm()
