@@ -181,12 +181,13 @@ rm(rtable_tr, movieId)
 
 rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
-gen_x <- setnafill(gen[,-1], type = "const", fill = 0)
-gen_x <- as(as.matrix(gen_x), "sparseMatrix")
+gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
+gen_x <- (gen_x - mean(gen_x)) / sd(gen_x)
 gen_x <- t(gen_x)
 
 #!!!!!dim(y)[1] == dim(x)[1], which is contrast to doc!!!!
-fit <- cv.glmnet(gen_x[1:500,], rtable_y[1:500,], family = "mgaussian", 
+fit <- cv.glmnet(gen_x, rtable_y[1:500,],
+                 family = "mgaussian", 
                  intercept = FALSE, type.measure = "mse", 
                  nfolds = 5, alpha = 0.5, 
                  parallel = TRUE, trace.it = TRUE)
