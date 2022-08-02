@@ -185,12 +185,13 @@ gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
 gen_x <- t(gen_x)
 
 #!!!!!dim(y)[1] == dim(x)[1], which is contrast to doc!!!!
-fit <- cv.glmnet(gen_x, rtable_y[,1:1000],
+fit0 <- cv.glmnet(gen_x, rtable_y[,1:2000],
                  family = "mgaussian", 
                  intercept = FALSE, type.measure = "mse", 
                  nfolds = 5, alpha = 0.5, 
                  parallel = TRUE, trace.it = TRUE)
-u_beta <- coef(fit, s= "lambda.min")
+u_beta0 <- coef(fit, s= "lambda.min")
+
 #clean env vars rm()
 
 #sgd
