@@ -186,7 +186,7 @@ gen_x <- t(gen_x)
 ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
 
 u_beta <- list()
-for(k in 1:2)function(k){
+for(k in 1:2){
   fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
                      family = "mgaussian", 
                      intercept = FALSE, type.measure = "mse", 
