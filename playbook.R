@@ -183,15 +183,32 @@ rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
 gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
 gen_x <- t(gen_x)
+ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
 
-#!!!!!dim(y)[1] == dim(x)[1], which is contrast to doc!!!!
-fit0 <- cv.glmnet(gen_x, rtable_y[,1:2000],
+u_beta <- lapply(1:2, function(k){
+  fit <- cv.glmnet(gen_x, rtable_y[,1:ind_y[[k]]],
+                     family = "mgaussian", 
+                     intercept = FALSE, type.measure = "mse", 
+                     nfolds = 5, alpha = 0.5, 
+                     parallel = TRUE, trace.it = TRUE)
+  u_beta <- coef(fit, s= "lambda.min")
+  rm(fit)
+  gc()
+})
+
+fit_0 <- cv.glmnet(gen_x, rtable_y[,1:ind_y[[]]],
                  family = "mgaussian", 
                  intercept = FALSE, type.measure = "mse", 
                  nfolds = 5, alpha = 0.5, 
                  parallel = TRUE, trace.it = TRUE)
-u_beta0 <- coef(fit, s= "lambda.min")
+u_beta_0 <- coef(fit, s= "lambda.min")
 
+fit_1 <- cv.glmnet(gen_x, rtable_y[,1:2000],
+                  family = "mgaussian", 
+                  intercept = FALSE, type.measure = "mse", 
+                  nfolds = 5, alpha = 0.5, 
+                  parallel = TRUE, trace.it = TRUE)
+u_beta_0 <- coef(fit, s= "lambda.min")
 #clean env vars rm()
 
 #sgd
