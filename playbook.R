@@ -185,16 +185,17 @@ gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
 gen_x <- t(gen_x)
 ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
 
-u_beta <- lapply(1:2, function(k){
-  fit <- cv.glmnet(gen_x, rtable_y[,1:ind_y[[k]]],
+u_beta <- list()
+for(k in 1:2)function(k){
+  fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
                      family = "mgaussian", 
                      intercept = FALSE, type.measure = "mse", 
                      nfolds = 5, alpha = 0.5, 
                      parallel = TRUE, trace.it = TRUE)
-  u_beta <- coef(fit, s= "lambda.min")
+  u_beta[[k]] <- coef(fit, s= "lambda.min")
   rm(fit)
   gc()
-})
+}
 
 fit_0 <- cv.glmnet(gen_x, rtable_y[,1:ind_y[[]]],
                  family = "mgaussian", 
