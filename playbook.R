@@ -183,10 +183,11 @@ rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
 gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
 gen_x <- t(gen_x)
+set.seed(1, sample.kind = "Rounding")
 ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
 
 u_beta <- list()
-for(k in 1:2){
+for(k in 1:length(ind_y)){
   fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
                      family = "mgaussian", 
                      intercept = FALSE, type.measure = "mse", 
