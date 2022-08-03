@@ -57,11 +57,11 @@ ub_tune <- foreach(k = 1:5) %:%
       u_bias <- train_cv[[k]][
         , .(u_bias = sum(rating - g_mean)/(l + .N)), by = .(userId)]
       
-      pred <- test_cv[[k]][u_bias, on = .(userId)][
+      pred <- u_bias[test_cv[[k]], on = .(userId)][
         , .(pred = u_bias + g_mean), by = .(userId)]
       
-      rmse <- test_cv[[k]][pred, on = .(userId)][
-        !is.na(rating), sqrt(mean((rating - pred)^2))]
+      rmse <- pred[test_cv[[k]], on = .(userId)][
+        , sqrt(mean((rating - pred)^2))]
       }
 
 #plot the results to search possible lambda_u
@@ -190,28 +190,28 @@ u_beta <- list()
 for(k in 1:length(ind_y)){
   fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
                      family = "mgaussian", 
-                     intercept = FALSE, type.measure = "mse", 
+                     type.measure = "mse", 
                      nfolds = 5, alpha = 0.5, 
                      parallel = TRUE, trace.it = TRUE)
   u_beta[[k]] <- coef(fit, s= "lambda.min")
   rm(fit)
   gc()
 }
+rm(k)
+u_beta <- unlist(u_beta)
 
-fit_0 <- cv.glmnet(gen_x, rtable_y[,1:ind_y[[]]],
-                 family = "mgaussian", 
-                 intercept = FALSE, type.measure = "mse", 
-                 nfolds = 5, alpha = 0.5, 
-                 parallel = TRUE, trace.it = TRUE)
-u_beta_0 <- coef(fit, s= "lambda.min")
+uid_test <- sample_test$userId %>% as.character()
+mid_test <- sample_test$movieId %>% as.character()
 
-fit_1 <- cv.glmnet(gen_x, rtable_y[,1:2000],
-                  family = "mgaussian", 
-                  intercept = FALSE, type.measure = "mse", 
-                  nfolds = 5, alpha = 0.5, 
-                  parallel = TRUE, trace.it = TRUE)
-u_beta_0 <- coef(fit, s= "lambda.min")
-#clean env vars rm()
+gen_bias <- foreach(i = 1:226, .combine = "c") %dopar% {
+  gen[,mid_test[i]] %*% u_beta[[uid_test[i]]][-1] + u_beta[[uid_test[i]]][1]
+}
+
+pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
+    , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
+    , ':='(pred = pred <- g_mean + u_bias + m_bias + gen_bias, 
+           err = pred - rating)]
+sqrt(crossprod(pred$err) / length(pred$err))
 
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
@@ -284,15 +284,11 @@ rmse <- function(g_mean, u_bias, m_bias, P, Q, valid){
             pred_mid <- as.character(unlist(pred[,2]))
             n <- length(pred$pred)
             
-            cl <- makePSOCKcluster(3)
-            registerDoParallel(cl) 
             pred_resids <- foreach(i = 1:n, 
                                    .combine = "c", 
                                    .packages = "data.table") %dopar% {
                                     P[,pred_uid[i]] %*% Q[,pred_mid[i]]
                                   }
-            stopCluster(cl)
-            rm(cl)
 
             pred <- pred[, resid := pred_resids]
             err_rmse <- valid[pred, on = .(userId, movieId)][
