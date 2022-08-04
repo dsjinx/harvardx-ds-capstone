@@ -74,30 +74,27 @@ u_bias <- sample_train[, .(u_bias = sum(rating - g_mean)/(lambda_u + .N)),
                         by = .(userId)]
 
 rm(ub_rmse, ub_tune, lambda_search, lambda_u)
-
+rm(mb_rmse, mb_tune, lambda_search)
 #m_bias (repeat the u_bias tuning method)
-lambda_search <- seq(1, 6, 0.1)
-mb_tune <- foreach(k = 1:5) %:% 
-  foreach(l = lambda_search, 
-          .combine = "c",
-          .packages = "data.table") %dopar% {
-      m_bias <- train_cv[[k]][u_bias, on = .(userId)][!is.na(rating),
-          .(m_bias = sum(rating - g_mean - u_bias)/(l + .N)), 
-          by = .(movieId)]
-      
-      pred <- test_cv[[k]][u_bias, on = .(userId)][
-          m_bias, on = .(movieId)][!is.na(rating),
-          .(pred = u_bias + m_bias + g_mean), 
-          by = .(userId, movieId)]
-      
-      rmse <- test_cv[[k]][pred, on = .(userId, movieId)][
-        , sqrt(mean((rating - pred)^2))]
-      }
-
-mb_rmse <- as.data.table(t(sapply(mb_tune, c))) %>% 
-  setnames(., as.character(lambda_search))
-mb_rmse <- mb_rmse[, lapply(.SD, mean)]
-qplot(x = lambda_search, y = as.numeric(mb_rmse[1,]), 
+lambda_search <- seq(10, 50, 0.01)
+mb_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
+  foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
+    m_bias <- u_bias[train_cv[[1]], on = .(userId)][
+      , .(m_bias = sum(g_mean + u_bias - rating) / (50 + .N)), 
+      by = .(movieId)]
+    
+    pred <- m_bias[u_bias[test_cv[[1]], 
+                          on = .(userId)], 
+                   on = .(movieId)][
+                     , .(err = g_mean + u_bias + m_bias - rating)]
+    
+    sqrt(mean(crossprod(pred$err)))
+  }
+  
+setDT(mb_tune)
+setnames(mb_tune, as.character(lambda_search))
+mb_rmse <- mb_tune[, lapply(.SD, mean)]
+qplot(lambda_search, as.numeric(mb_rmse[1,]), 
       geom = c("point", "line"))
 lambda_m <- lambda_search[which.min(mb_rmse)]
 m_bias <- sample_train[u_bias, on = .(userId)][!is.na(rating), 
