@@ -39,8 +39,12 @@ train_cv <- list()
 test_cv <- list()
 for(k in 1:5){
   train_cv[[k]] <- sample_train[-ind_cv[[k]],]
-  test_cv[[k]] <- sample_train[ind_cv[[k]],]
+  test_cv[[k]] <- sample_train[ind_cv[[k]],] %>% 
+    semi_join(train_cv[[k]], by = "movieId") %>% 
+    semi_join(train_cv[[k]], by = "userId")
 }
+
+
 
 rm(k, ind_cv)
 
@@ -49,33 +53,27 @@ rm(k, ind_cv)
 lambda_search <- seq(5, 16, 0.1)
 #implement parallel computing to save time
 registerDoParallel(cores = 3)
-ub_tune <- foreach(k = 1:5) %:% 
-    foreach(l = lambda_search, 
-            .combine = "c", 
-            .packages = "data.table") %dopar% {
-      
-      u_bias <- train_cv[[k]][
-        , .(u_bias = sum(rating - g_mean)/(l + .N)), by = .(userId)]
-      
-      pred <- u_bias[test_cv[[k]], on = .(userId)][
-        , .(pred = u_bias + g_mean), by = .(userId)]
-      
-      rmse <- pred[test_cv[[k]], on = .(userId)][
-        , sqrt(mean((rating - pred)^2))]
-      }
+ub_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
+  foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
+    u_bias <- train_cv[[k]][
+      , .(u_bias = sum(rating - g_mean) / (l + .N)), by = .(userId)]
+    
+    pred <- u_bias[test_cv[[k]], on = .(userId)][
+      , .(err = g_mean + u_bias - rating)]
+    
+    sqrt(mean(crossprod(pred$err)))
+  }
 
-#plot the results to search possible lambda_u
-ub_rmse <- as.data.table(t(sapply(ub_tune, c))) %>% 
-  setnames(., as.character(lambda_search))
-ub_rmse <- ub_rmse[, lapply(.SD, mean)]
-qplot(x = lambda_search, y = as.numeric(ub_rmse[1,]), 
-      geom = c("point", "line"))
+setDT(ub_tune)
+setnames(ub_tune, as.character(lambda_search))
+ub_rmse <- ub_tune[, lapply(.SD, mean)]
+qplot(lambda_search, as.numeric(ub_rmse[1, ]), geom = c("point", "line"))
 #try different ranges of lambda_search to find the bottom on plot
 lambda_u <- lambda_search[which.min(as.numeric(ub_rmse))]
 u_bias <- sample_train[, .(u_bias = sum(rating - g_mean)/(lambda_u + .N)), 
                         by = .(userId)]
 
-rm(ub_rmse, ub_tune, lambda_search)
+rm(ub_rmse, ub_tune, lambda_search, lambda_u)
 
 #m_bias (repeat the u_bias tuning method)
 lambda_search <- seq(1, 6, 0.1)
@@ -211,7 +209,7 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
     , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
     , ':='(pred = pred <- g_mean + u_bias + m_bias + gen_bias, 
            err = pred - rating)]
-sqrt(crossprod(pred$err) / length(pred$err))
+sqrt(mean(crossprod(pred$err)))
 
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
