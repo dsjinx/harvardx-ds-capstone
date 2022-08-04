@@ -74,7 +74,7 @@ u_bias <- sample_train[, .(u_bias = sum(rating - g_mean) / (lambda_u + .N)),
                         by = .(userId)]
 
 rm(ub_rmse, ub_tune, lambda_search, lambda_u)
-rm(mb_rmse, mb_tune, lambda_search)
+#rm(mb_rmse, mb_tune, lambda_search)
 #m_bias (repeat the u_bias tuning method)
 lambda_search <- seq(1, 5, 0.1)
 mb_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
@@ -109,9 +109,8 @@ gen_cat <- genres %>% unlist() %>% unique()
 n <- length(gen_cat)
 gen_mean <- foreach(g = 1:n, .combine = "c", 
                     .packages = "data.table") %dopar% {
-                  sample_train[u_bias, on = .(userId)][
-                    m_bias, on = .(movieId)][
-                    genres %like% gen_cat[g],
+                    m_bias[u_bias[sample_train, on = .(userId)], 
+                           on = .(movieId)][genres %like% gen_cat[g],
                     mean(g_mean + u_bias + m_bias - rating)]
                   }
 
@@ -143,14 +142,11 @@ colnames(gen)[-1] <- m_id
 rm(j, genres, ind, m_gen, gen_cat, gen_mean, m_n)
 
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
-residual_train <- sample_train[u_bias, on = .(userId)][
-                          m_bias, on = .(movieId)][
-                            , .(resid = g_mean + u_bias + m_bias - rating), 
+residual_train <- m_bias[u_bias[sample_train, on = .(userId)]
+                         , on = .(movieId)][
+                           , .(resid = g_mean + u_bias + m_bias - rating), 
                             by = .(userId, movieId)]
 sum(residual_train$resid == 0) #check overfittings 
-
-
-#residual_train <- residual_train[m_id_dt, on = .(movieId)]
 
 #QQ plot to check the distribution
 r_mean <- residual_train[, mean(resid)]
