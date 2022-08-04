@@ -50,7 +50,7 @@ rm(k, ind_cv)
 
 #u_bias
 #guessing and reviewing with plotting
-lambda_search <- seq(5, 16, 0.1)
+lambda_search <- seq(5, 12, 0.1)
 #implement parallel computing to save time
 registerDoParallel(cores = 3)
 ub_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
@@ -69,21 +69,21 @@ setnames(ub_tune, as.character(lambda_search))
 ub_rmse <- ub_tune[, lapply(.SD, mean)]
 qplot(lambda_search, as.numeric(ub_rmse[1, ]), geom = c("point", "line"))
 #try different ranges of lambda_search to find the bottom on plot
-lambda_u <- lambda_search[which.min(as.numeric(ub_rmse))]
-u_bias <- sample_train[, .(u_bias = sum(rating - g_mean)/(lambda_u + .N)), 
+lambda_u <- lambda_search[which.min(ub_rmse[1,])]
+u_bias <- sample_train[, .(u_bias = sum(rating - g_mean) / (lambda_u + .N)), 
                         by = .(userId)]
 
 rm(ub_rmse, ub_tune, lambda_search, lambda_u)
 rm(mb_rmse, mb_tune, lambda_search)
 #m_bias (repeat the u_bias tuning method)
-lambda_search <- seq(10, 50, 0.01)
+lambda_search <- seq(1, 5, 0.1)
 mb_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
   foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
-    m_bias <- u_bias[train_cv[[1]], on = .(userId)][
-      , .(m_bias = sum(g_mean + u_bias - rating) / (50 + .N)), 
+    m_bias <- u_bias[train_cv[[k]], on = .(userId)][
+      , .(m_bias = sum(rating - g_mean - u_bias) / (l + .N)), 
       by = .(movieId)]
     
-    pred <- m_bias[u_bias[test_cv[[1]], 
+    pred <- m_bias[u_bias[test_cv[[k]], 
                           on = .(userId)], 
                    on = .(movieId)][
                      , .(err = g_mean + u_bias + m_bias - rating)]
@@ -96,12 +96,12 @@ setnames(mb_tune, as.character(lambda_search))
 mb_rmse <- mb_tune[, lapply(.SD, mean)]
 qplot(lambda_search, as.numeric(mb_rmse[1,]), 
       geom = c("point", "line"))
-lambda_m <- lambda_search[which.min(mb_rmse)]
-m_bias <- sample_train[u_bias, on = .(userId)][!is.na(rating), 
-            .(m_bias = sum(rating - g_mean - u_bias)/(lambda_m + .N)), 
+lambda_m <- lambda_search[which.min(mb_rmse[1,])]
+m_bias <- sample_train[u_bias, on = .(userId)][
+  , .(m_bias = sum(rating - g_mean - u_bias) / (lambda_m + .N)), 
             by = .(movieId)]
 
-rm(mb_tune, mb_rmse, lambda_search, lambda_m, lambda_u, train_cv, test_cv)
+rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
 
 #genres
 genres <- str_split(sample_train$genres, "\\|") 
