@@ -202,7 +202,7 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
     , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
     , ':='(pred = pred <- g_mean + u_bias + m_bias + gen_bias, 
            err = pred - rating)]
-sqrt(mean(crossprod(pred$err)))
+sqrt(mean(pred$err * pred$err))
 
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
