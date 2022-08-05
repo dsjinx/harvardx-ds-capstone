@@ -53,15 +53,93 @@ removed <- anti_join(temp, validation)
 edx <- rbind(edx, removed)
 
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
+##########################################################
+#save data set(edx, validation) at local directory, so we do not need to repeat 
+#above process, if we get stuck and crashed during the following process
+save(edx, validation, file = "mledx.rdata")
+load("mledx.rdata")
 
-#save the downloaded/prepared data in local drive, so we do not have to repeat the process,
-#if our system get crashed in the following work. 
-save(edx, file = "edx.rda")
-save(validation, file = "validation.rda")
-
-# Data exploration
-edx %>% tibble()
+#library(tidyverse)
+#library(data.table)
+library(stringr)
+#library(caret)
+library(Matrix)
+library(doParallel)
+library(glmnet)
 
 #global mean
-mu <- 
+g_mean <- mean(edx$rating)
 
+#biases
+#making 5-folds cross validation sets
+set.seed(2, sample.kind= "Rounding")
+ind_cv <- createFolds(edx$userId, k = 5)
+train_cv <- list()
+test_cv <- list()
+for(k in 1:5){
+  train_cv[[k]] <- edx[-ind_cv[[k]],]
+  test_cv[[k]] <- edx[ind_cv[[k]],] %>% 
+    semi_join(train_cv[[k]], by = "movieId") %>% 
+    semi_join(train_cv[[k]], by = "userId")
+}
+
+rm(k, ind_cv)
+
+#user-bias with ridge regression penalty
+lambda_search <- seq(5, 12, 0.1) 
+#utilize the multicores on our computer to parallelize the loop
+registerDoParallel(cores = 3) #I am using total cores -1 to avoid system frozen
+#number of cores only need to be registered once globally
+ub_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
+  foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
+    u_bias <- train_cv[[k]][
+      , .(u_bias = sum(rating - g_mean) / (l + .N)), by = .(userId)]
+    
+    pred <- u_bias[test_cv[[k]], on = .(userId)][
+      , .(err = g_mean + u_bias - rating)]
+    
+    sqrt(mean(pred$err * pred$err))
+  }
+
+setDT(ub_tune)
+setnames(ub_tune, as.character(lambda_search))
+ub_rmse <- ub_tune[, lapply(.SD, mean)]
+#try different ranges of lambda_search to find the turning bottom in plot
+qplot(lambda_search, as.numeric(ub_rmse[1, ]), geom = c("point", "line"))
+
+lambda_u <- lambda_search[which.min(ub_rmse[1,])]
+u_bias <- sample_train[, .(u_bias = sum(rating - g_mean) / (lambda_u + .N)), 
+                       by = .(userId)]
+
+rm(ub_rmse, ub_tune, lambda_search, lambda_u)
+
+#movie-bias with ridge regression penalty
+lambda_search <- seq(1, 5, 0.1)
+mb_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
+  foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
+    m_bias <- u_bias[train_cv[[k]], on = .(userId)][
+      , .(m_bias = sum(rating - g_mean - u_bias) / (l + .N)), 
+      by = .(movieId)]
+    
+    pred <- m_bias[u_bias[test_cv[[k]], 
+                          on = .(userId)], 
+                   on = .(movieId)][
+                     , .(err = g_mean + u_bias + m_bias - rating)]
+    
+    sqrt(mean(pred$err * pred$err))
+  }
+
+setDT(mb_tune)
+setnames(mb_tune, as.character(lambda_search))
+mb_rmse <- mb_tune[, lapply(.SD, mean)]
+qplot(lambda_search, as.numeric(mb_rmse[1,]), 
+      geom = c("point", "line"))
+
+lambda_m <- lambda_search[which.min(mb_rmse[1,])]
+m_bias <- sample_train[u_bias, on = .(userId)][
+  , .(m_bias = sum(rating - g_mean - u_bias) / (lambda_m + .N)), 
+  by = .(movieId)]
+
+rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
+
+#genres-bias with elastic net penalty

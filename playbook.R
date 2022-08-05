@@ -61,7 +61,7 @@ ub_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:%
     pred <- u_bias[test_cv[[k]], on = .(userId)][
       , .(err = g_mean + u_bias - rating)]
     
-    sqrt(mean(crossprod(pred$err)))
+    sqrt(mean(pred$err * pred$err))
   }
 
 setDT(ub_tune)
@@ -88,7 +88,7 @@ mb_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:%
                    on = .(movieId)][
                      , .(err = g_mean + u_bias + m_bias - rating)]
     
-    sqrt(mean(crossprod(pred$err)))
+    sqrt(mean(pred$err * pred$err))
   }
   
 setDT(mb_tune)
