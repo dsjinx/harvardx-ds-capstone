@@ -224,6 +224,7 @@ predb <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
 sqrt(mean(predb$err * predb$err))
 
 
+
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
 resids <- rtable_sparse@x #training resid
@@ -234,7 +235,7 @@ resid_j <- rep(1:rtable_sparse@Dim[2], diff(rtable_sparse@p))
 rm(rtable, residual_train)
 
 #warm start P Q matrix for sgd
-k <- 200
+k <- 20
 f_mean <- sqrt(r_mean/k)
 f_sd<- r_sd/sqrt(k) #by LNN
 set.seed(0, sample.kind = "Rounding")
