@@ -177,17 +177,30 @@ gen_x <- t(gen_x)
 set.seed(1, sample.kind = "Rounding")
 ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
 
-u_beta <- list()
-for(k in 1:length(ind_y)){
+#choice between fitting data in limited ram with slow for loop
+#speed up the learning with lapply but require bit ram space
+b <- length(ind_y)
+system.time(u_beta <- lapply(1:b, function(k){
+  fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
+                   family = "mgaussian", 
+                   type.measure = "mse", 
+                   nfolds = 5, alpha = 0.5,
+                   parallel = TRUE, trace.it = TRUE)
+  coef(fit, s= "lambda.min")}
+  )
+)
+
+u_betas <- list()
+system.time(for(k in 1:b){
   fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
                      family = "mgaussian", 
                      type.measure = "mse", 
                      nfolds = 5, alpha = 0.5, 
                      parallel = TRUE, trace.it = TRUE)
-  u_beta[[k]] <- coef(fit, s= "lambda.min")
+  u_betas[[k]] <- coef(fit, s= "lambda.min")
   rm(fit)
   gc()
-}
+})
 rm(k)
 u_beta <- unlist(u_beta)
 
