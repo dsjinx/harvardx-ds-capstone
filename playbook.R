@@ -204,6 +204,13 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
            err = pred - rating)]
 sqrt(mean(pred$err * pred$err))
 
+predb <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
+  , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
+    , ':='(pred = pred <- g_mean + u_bias + m_bias, 
+           err = pred - rating)]
+sqrt(mean(predb$err * predb$err))
+
+
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
 resids <- rtable_sparse@x #training resid
