@@ -217,6 +217,11 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
            err = pred - rating)]
 sqrt(mean(pred$err * pred$err))
 
+i <- length(u_beta)
+u_beta_int <- foreach(k = 1:i, .combine = "c") %dopar% {
+  u_beta[[k]][1]
+}
+
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
 resids <- rtable_sparse@x #training resid
