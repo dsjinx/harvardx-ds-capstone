@@ -253,10 +253,11 @@ k <- length(ind_alt_y)
 gen_alt_x <- lapply(1:k, function(m){
   temp <- cv.glmnet(u_beta_alt, rtable_alt_y[, ind_alt_y[[m]]], 
                     family = "mgaussian", intercept = FALSE, 
-                    type.measure = "mse", nfolds = 5, 
+                    type.measure = "mse", 
                     parallel = TRUE, trace.it = TRUE)
   coef(temp, s = "lambda.min")
-})
+}) #method wont work, predictors are too sparse ->sgd
+rm(k, ind_alt_y)
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
 resids <- rtable_sparse@x #training resid
