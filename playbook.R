@@ -44,8 +44,6 @@ for(k in 1:5){
     semi_join(train_cv[[k]], by = "userId")
 }
 
-
-
 rm(k, ind_cv)
 
 #u_bias
@@ -160,7 +158,6 @@ rm(p, r_quantile, n_quantile)
 
 rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
-u_id <- rtable[, 1]
 movieId <- names(rtable[,-1])
 rtable_tr <- transpose(rtable, keep.names = "movieId", 
                       make.names = "userId")
@@ -179,6 +176,7 @@ ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
 
 #choice between fitting data in limited ram with slow for loop
 #speed up the learning with lapply but require bit ram space
+#some how the lappy version does not work on windows
 b <- length(ind_y)
 system.time(u_beta <- lapply(1:b, function(k){
   fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
@@ -189,6 +187,8 @@ system.time(u_beta <- lapply(1:b, function(k){
   coef(fit, s= "lambda.min")}
   )
 )
+rm(b)
+u_beta <- unlist(u_beta)
 
 u_betas <- list()
 system.time(for(k in 1:b){
@@ -213,15 +213,35 @@ gen_bias <- foreach(i = 1:226, .combine = "c") %dopar% {
 
 pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
     , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
-    , ':='(pred = pred <- g_mean + u_bias + m_bias + gen_bias, 
+    , ':='(pred = pred <- g_mean + u_bias + m_bias - gen_bias, 
            err = pred - rating)]
 sqrt(mean(pred$err * pred$err))
 
-i <- length(u_beta)
-u_beta_int <- foreach(k = 1:i, .combine = "c") %dopar% {
-  u_beta[[k]][1]
+#update the gen_x with trained beta
+k <- length(u_beta)
+u_beta_int <- foreach(k = 1:k, .combine = "c") %dopar% {
+  u_beta[[k]][1] + 0
 }
+uid <- names(u_beta) %>% as.numeric()
+u_beta_int <- data.table(uid, u_beta_int)
+rm(k, uid)
 
+residual_alt <- u_beta_int[residual_train, on = .(uid = userId)][
+  , resid_alt := resid - u_beta_int
+]
+rtable_alt <- dcast(residual_alt, uid ~ movieId, value.var = "resid_alt")
+u_beta_alt <- Matrix(0, nrow = 7612, ncol = length(u_beta[[1]]) - 1)
+for(i in 1:7612){
+  u_beta_alt[,i] <- u_beta[[i]][-1]
+}
+userId <- names(u_beta_alt)
+u_beta_alt <- transpose(u_beta_alt, keep.names = "userId")
+
+rtable_alt_y <- setnafill(rtable_alt[,-1], fill = 0)
+rtable_alt_y <- as(as.matrix(rtable_alt_y), "sparseMatrix")
+rm(userId)
+
+for
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
 resids <- rtable_sparse@x #training resid
