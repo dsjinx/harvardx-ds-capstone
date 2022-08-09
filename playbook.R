@@ -261,6 +261,7 @@ gen_alt_x <- lapply(1:k, function(m){
 rm(k, ind_alt_y)
 
 #sgd
+##################################
 uid_train <- sample_train$userId %>% as.character()
 mid_train <- sample_train$movieId %>% as.character()
 gl <- length(sample_train$genres)
@@ -313,7 +314,7 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
       })
     learning_log[[t]] <- sqrt(mean(err * err))
   }
-  return(learning_log, P, Q)
+  return(learning_log)
 }
 
 sgdl <- sgd(P = P, Q = Q , y = R, 
@@ -322,6 +323,69 @@ sgdl <- sgd(P = P, Q = Q , y = R,
 sgdl <- unlist(sgdl)
 qplot(x = c(1:1500), y = sgdl)
 rm(sgdl)
+
+#run the algo to search opt P,Q
+######################
+#L_rate = 0.1
+#lambda = 5 
+#L_rate = 0.01
+#lambda = 1 
+#L_rate = 0.01
+#lambda = 5
+#L_rate = 0.01
+#lambda = 3
+L_rate = 0.0001
+lambda = 5
+batch_size = 30
+epochs = 1500
+n <- length(R) #change all the y in below into R
+learning_log <- vector("list", epochs)
+
+for (t in 1:epochs){
+  
+  batch_id <- sample(1:n, batch_size, replace = FALSE)
+  
+  for (ui in batch_id){
+    
+    err_ui <- c(P[, U_i[ui]] %*% Q[, M_j[ui]] - R[ui]) 
+    nabla_p <- err_ui * Q[, M_j[ui]]  + lambda * P[,U_i[ui]]
+    nabla_q <- err_ui * P[, U_i[ui]]  + lambda * Q[,M_j[ui]]
+    
+    P[, U_i[ui]] <- P[, U_i[ui]] - L_rate * nabla_p
+    Q[, M_j[ui]] <- Q[, M_j[ui]] - L_rate * nabla_q
+    
+    rm(err_ui, nabla_p, nabla_q)
+  }
+  
+  err <- sapply(1:n, function(j){
+    P[, U_i[j]] %*% Q[, M_j[j]] - R[j]
+  })
+  learning_log[[t]] <- sqrt(mean(err * err))
+  rm(err, batch_id)
+}
+
+learning_log <- unlist(learning_log)
+qplot(x = c(1:1500), y = learning_log)
+rm(L_rate, lambda, t, ui)
+
+names(P) <- uid_gen
+names(Q) <- mid_gen
+######################
+#val
+uid_test <- sample_test$userId %>% as.character()
+mid_test <- sample_test$movieId %>% as.character()
+
+i <- length(uid_test)
+gen_bias <- foreach(i = 1:i, .combine = "c") %dopar% {
+  gen[,mid_test[i]] %*% u_beta[[uid_test[i]]][-1] + u_beta[[uid_test[i]]][1]
+}
+
+
+pred <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
+  , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
+    , ':='(pred = pred <- g_mean + u_bias + m_bias + gen_bias, 
+           err = pred - rating)]
+sqrt(mean(pred$err * pred$err))
 
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
