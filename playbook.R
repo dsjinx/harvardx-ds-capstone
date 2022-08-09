@@ -222,7 +222,7 @@ sqrt(mean(pred$err * pred$err))
 
 rm(gen, gen_x, ind_y, rtable_y)
 
-#update the gen_x with trained beta
+#update the gen_x with trained beta###################
 k <- length(u_beta)
 u_beta_int <- foreach(k = 1:k, .combine = "c") %dopar% {
   u_beta[[k]][1] + 0
@@ -247,6 +247,7 @@ rtable_alt_y <- as(as.matrix(rtable_alt_y), "sparseMatrix")
 
 rm(i, uid, uid_dt, residual_alt, residual_train, rtable_alt)
 
+set.seed(2, sample.kind = "Rounding")
 ind_alt_y <- createFolds(1: rtable_alt_y@Dim[2], 
                      k = ceiling(rtable_alt_y@Dim[2]/1000))
 k <- length(ind_alt_y)
@@ -258,31 +259,32 @@ gen_alt_x <- lapply(1:k, function(m){
   coef(temp, s = "lambda.min")
 }) #method wont work, predictors are too sparse ->sgd
 rm(k, ind_alt_y)
+
 #sgd
-#rtable_sparse[is.na(rtable_sparse)] <- 0
-resids <- rtable_sparse@x #training resid
-resid_i <- rtable_sparse@i + 1 #row index of resid (user) 
+resid_gen <- m_bias[u_bias[sample_train[, .(userId, movieId, rating)][
+  , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
+    , ':='(pred = pred <- g_mean + u_bias + m_bias - gen_bias, 
+           err = pred - rating)]
+rtable_gen <- dcast(resid_gen, userId ~ movieId, value.var = "err")
+uid_gen <- rtable_gen[,1]
+mid_gen <- names(rtable_gen)
+rtable_gen <- setnafill(rtable_gen[,-1], fill = "0")
+rtable_gen <- Matrix(as.matrix(rtable_gen), "sparseMatrix")
+
+R <- rtable_gen@x #training resid
+U_i <- rtable_gen@i + 1 #row index of resid (user) 
 #col index of resid (movie)
-resid_j <- rep(1:rtable_sparse@Dim[2], diff(rtable_sparse@p)) 
+M_j <- rep(1:rtable_gen@Dim[2], diff(rtable_gen@p))
 
-rm(rtable, residual_train)
+#P Q starter matrix for sgd
+f <- 40
+set.seed(3, sample.kind = "Rounding")
+P <- matrix(runi(f*rtable_gen@Dim[1], 0, 1), nrow = k)
+set.seed(4, sample.kind = "Rounding")
+Q <- matrix(runif(f*rtable_gen@Dim[2], 0, 1), nrow = k)
 
-#warm start P Q matrix for sgd
-k <- 200
-f_mean <- sqrt(r_mean/k)
-f_sd<- r_sd/sqrt(k) #by LNN
-set.seed(0, sample.kind = "Rounding")
-P <- matrix(rnorm(k*rtable_sparse@Dim[1], f_mean, f_sd), nrow = k)
-set.seed(0, sample.kind = "Rounding")
-Q <- matrix(rnorm(k*rtable_sparse@Dim[2], f_mean, f_sd), nrow = k)
-
-sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
-  #y: resid to be trained on (rtable_sparse in dgCMatrix sparse format)
-  #lambda_p/q: not tuned, try 
-  #batch_size: sample size out of total number of training resid 
-  #batch_size * epochs should be much larger than length(y) 
-  r <- y
-  n <- length(y) #number of training resid
+sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
+  n <- length(y) 
   learning_log <- list()
   
   for (t in 1:epochs){
