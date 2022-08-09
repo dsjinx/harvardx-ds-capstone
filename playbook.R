@@ -376,15 +376,19 @@ uid_test <- sample_test$userId %>% as.character()
 mid_test <- sample_test$movieId %>% as.character()
 
 i <- length(uid_test)
-gen_bias <- foreach(i = 1:i, .combine = "c") %dopar% {
+gen_bias_val <- foreach(i = 1:i, .combine = "c") %dopar% {
   gen[,mid_test[i]] %*% u_beta[[uid_test[i]]][-1] + u_beta[[uid_test[i]]][1]
 }
 
+f_sgd <- foreach(i = 1:i, .combine ="c") %dorpar% {
+  P[, uid_test[i]] %*% Q[, mid_test[i]]
+}
 
-pred <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
-  , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
-    , ':='(pred = pred <- g_mean + u_bias + m_bias + gen_bias, 
-           err = pred - rating)]
+pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
+  , ":="(gen_bias = gen_bias_val, f_sgd = f_sgd)], on = .(userId)], on = .(movieId)][
+    ,  ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - f_sgd, 
+            err = pred - rating)]
+
 sqrt(mean(pred$err * pred$err))
 
 #validation
