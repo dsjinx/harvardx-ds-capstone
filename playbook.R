@@ -285,7 +285,7 @@ Q <- matrix(runif(f*rtable_gen@Dim[2], 0, 1), nrow = k)
 
 sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
   n <- length(y) 
-  learning_log <- list()
+  learning_log <- vector("list", n)
   
   for (t in 1:epochs){
     
@@ -293,29 +293,28 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
     
     for (ui in batch_id){
         
-        err_ui <- c(P[,resid_i[ui]] %*% Q[,resid_j[ui]] - r[ui]) 
-        nabla_p <- err_ui * Q[,resid_j[ui]] / n + lambda_p * P[,resid_i[ui]]
-        nabla_q <- err_ui * P[,resid_i[ui]] / n + lambda_q * Q[,resid_j[ui]]
+        err_ui <- c(P[, U_[ui]] %*% Q[, M_j[ui]] - y[ui]) 
+        nabla_p <- err_ui * Q[, M_j[ui]]  + lambda * P[,U_i[ui]]
+        nabla_q <- err_ui * P[, U_i[ui]]  + lambda * Q[,M_j[ui]]
         
-        P[,resid_i[ui]] <- P[,resid_i[ui]] - L_rate * nabla_p
-        Q[,resid_j[ui]] <- Q[,resid_j[ui]] - L_rate * nabla_q
+        P[, U_i[ui]] <- P[, U_i[ui]] - L_rate * nabla_p
+        Q[, M_j[ui]] <- Q[, M_j[ui]] - L_rate * nabla_q
     }
     
     err <- sapply(1:n, function(j){
-      P[,resid_i[j]] %*% Q[,resid_j[j]] - r[j]
+      P[, U_i[j]] %*% Q[, M_j[j]] - r[j]
       })
-    learning_log[[t]] <- sqrt(mean(err^2))
-    rm(err)
+    learning_log[[t]] <- sqrt(mean(err * err))
   }
   return(learning_log)
 }
 
-learning_result <- sgd(P = P, Q = Q , y = resids, 
-                       L_rate = 0.6, lambda_p = 0.3, lambda_q = 0.3, 
+sgdl <- sgd(P = P, Q = Q , y = R, 
+                       L_rate = 0.1, lambda = 1, 
                        batch_size = 30, epochs = 500)
-learning_result <- unlist(learning_result)
-qplot(x = c(1:500), y = learning_result)
-rm(learning_result) #clean before restart
+sgdl <- unlist(sgdl)
+qplot(x = c(1:500), y = sgdl)
+rm(sgdl) #clean before restart
 
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
