@@ -102,7 +102,7 @@ m_bias <- sample_train[u_bias, on = .(userId)][
 rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
 
 #genres
-genres <- str_split(sample_train$genres, "\\|") 
+genres <- str_split(sample_train$genres, "\\|")
 gen_cat <- genres %>% unlist() %>% unique()
 n <- length(gen_cat)
 gen_mean <- foreach(g = 1:n, .combine = "c", 
@@ -165,7 +165,7 @@ rtable_tr$movieId <- as.numeric(rtable_tr$movieId)
 m_id_dt <- data.table(movieId = m_id)
 rtable <- rtable_tr[m_id_dt, on = .(movieId)]
 
-rm(rtable_tr, movieId, m_id, m_id_dt, m_id)
+rm(rtable_tr, movieId, m_id, m_id_dt)
 
 rtable_y <- setnafill(rtable[,-1], fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
@@ -261,14 +261,21 @@ gen_alt_x <- lapply(1:k, function(m){
 rm(k, ind_alt_y)
 
 #sgd
+uid_train <- sample_train$userId %>% as.character()
+mid_train <- sample_train$movieId %>% as.character()
+gl <- length(sample_train$genres)
+gen_bias <- foreach(i = 1:gl, .combine = "c") %dopar% {
+  gen[,mid_train[i]] %*% u_beta[[uid_train[i]]][-1] + u_beta[[uid_train[i]]][1]
+}
+rm(gl, uid_train, mid_train)
+
 resid_gen <- m_bias[u_bias[sample_train[, .(userId, movieId, rating)][
   , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
-    , ':='(pred = pred <- g_mean + u_bias + m_bias - gen_bias, 
-           err = pred - rating)]
+    , err := g_mean + u_bias + m_bias - gen_bias - rating]
 rtable_gen <- dcast(resid_gen, userId ~ movieId, value.var = "err")
 uid_gen <- rtable_gen[,1]
-mid_gen <- names(rtable_gen)
-rtable_gen <- setnafill(rtable_gen[,-1], fill = "0")
+mid_gen <- names(rtable_gen)[-1]
+rtable_gen <- setnafill(rtable_gen[,-1], fill = 0)
 rtable_gen <- Matrix(as.matrix(rtable_gen), "sparseMatrix")
 
 R <- rtable_gen@x #training resid
@@ -279,13 +286,13 @@ M_j <- rep(1:rtable_gen@Dim[2], diff(rtable_gen@p))
 #P Q starter matrix for sgd
 f <- 40
 set.seed(3, sample.kind = "Rounding")
-P <- matrix(runi(f*rtable_gen@Dim[1], 0, 1), nrow = k)
+P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
 set.seed(4, sample.kind = "Rounding")
-Q <- matrix(runif(f*rtable_gen@Dim[2], 0, 1), nrow = k)
+Q <- matrix(runif(f*rtable_gen@Dim[2], 0, 1), nrow = f)
 
 sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
   n <- length(y) 
-  learning_log <- vector("list", n)
+  learning_log <- vector("list", epochs)
   
   for (t in 1:epochs){
     
@@ -293,7 +300,7 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
     
     for (ui in batch_id){
         
-        err_ui <- c(P[, U_[ui]] %*% Q[, M_j[ui]] - y[ui]) 
+        err_ui <- c(P[, U_i[ui]] %*% Q[, M_j[ui]] - y[ui]) 
         nabla_p <- err_ui * Q[, M_j[ui]]  + lambda * P[,U_i[ui]]
         nabla_q <- err_ui * P[, U_i[ui]]  + lambda * Q[,M_j[ui]]
         
@@ -302,19 +309,19 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
     }
     
     err <- sapply(1:n, function(j){
-      P[, U_i[j]] %*% Q[, M_j[j]] - r[j]
+      P[, U_i[j]] %*% Q[, M_j[j]] - y[j]
       })
     learning_log[[t]] <- sqrt(mean(err * err))
   }
-  return(learning_log)
+  return(learning_log, P, Q)
 }
 
 sgdl <- sgd(P = P, Q = Q , y = R, 
-                       L_rate = 0.1, lambda = 1, 
-                       batch_size = 30, epochs = 500)
+                       L_rate = 0.1, lambda = 5, 
+                       batch_size = 30, epochs = 1500)
 sgdl <- unlist(sgdl)
-qplot(x = c(1:500), y = sgdl)
-rm(sgdl) #clean before restart
+qplot(x = c(1:1500), y = sgdl)
+rm(sgdl)
 
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
