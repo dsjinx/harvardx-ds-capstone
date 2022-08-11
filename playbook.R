@@ -217,6 +217,7 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
            err = pred - rating)]
 sqrt(mean(pred$err * pred$err))
 
+<<<<<<< HEAD
 predb <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
   , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
     , ':='(pred = pred <- g_mean + u_bias + m_bias, 
@@ -224,6 +225,12 @@ predb <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
 sqrt(mean(predb$err * predb$err))
 
 
+=======
+i <- length(u_beta)
+u_beta_int <- foreach(k = 1:i, .combine = "c") %dopar% {
+  u_beta[[k]][1]
+}
+>>>>>>> 8cfddb9fa9ed038526fd8b6deb346ede505d652a
 
 #sgd
 #rtable_sparse[is.na(rtable_sparse)] <- 0
