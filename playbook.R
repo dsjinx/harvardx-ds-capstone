@@ -1,11 +1,9 @@
 library(tidyverse)
 library(data.table)
-library(stringr)
 library(caret)
 library(Matrix)
 library(doParallel)
 library(glmnet)
-
 
 #load the edx data from misc folder
 #create a sample out of edx, and make a pair of train/test sets  
