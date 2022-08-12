@@ -284,7 +284,7 @@ U_i <- rtable_gen@i + 1 #row index of resid (user)
 M_j <- rep(1:rtable_gen@Dim[2], diff(rtable_gen@p))
 
 #P Q starter matrix for sgd
-f <- 100
+f <- 30
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
 set.seed(4, sample.kind = "Rounding")
@@ -317,15 +317,15 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
 }
 
 sgdl <- sgd(P = P, Q = Q , y = R, 
-                       L_rate = 0.01, lambda = 5, 
-                       batch_size = 30, epochs = 1500)
+                       L_rate = 0.05, lambda = 1, 
+                       batch_size = 30, epochs = 3000)
 sgdl <- unlist(sgdl)
-qplot(x = c(1:1500), y = sgdl)
+qplot(x = c(1:3000), y = sgdl)
 rm(sgdl)
 
 #run the algo to search opt P,Q
 ######################
-L_rate = 0.00001
+L_rate = 0.000
 lambda = 1 
 batch_size = 30
 epochs = 3000
@@ -379,12 +379,12 @@ rm(i)
 pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
   , ":="(gen_bias = gen_bias, f_sgd = f_sgd)], on = .(userId)], 
   on = .(movieId)][
-    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - 0*f_sgd, 
+    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - f_sgd, 
             err = pred - rating)]
 
 sqrt(mean(pred$err * pred$err))
 rm(f_sgd, gen_bias)
-
+rm(pred, P, Q)
 ###########
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
