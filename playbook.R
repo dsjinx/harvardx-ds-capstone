@@ -169,7 +169,7 @@ M_j0 <- rep(1:rtable_y0@Dim[2], diff(rtable_y0@p))
 rm(rtable, residual_train)
 
 #P Q starter matrix for sgd
-f <- 30
+f <- 80
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f*rtable_y0@Dim[1], 0, 1), nrow = f)
 set.seed(4, sample.kind = "Rounding")
@@ -201,21 +201,21 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
   return(learning_log)
 }
 
-sgdl <- sgd(P = P, Q = Q , y = R, 
+sgd0 <- sgd(P = P, Q = Q , y = R0, 
             L_rate = 0.05, lambda = 1, 
-            batch_size = 30, epochs = 3000)
-sgdl <- unlist(sgdl)
-qplot(x = c(1:3000), y = sgdl)
-rm(sgdl)
+            batch_size = 30, epochs = 5000*3)
+sgd0 <- unlist(sgd0)
+qplot(x = c(1:(5000*3)), y = sgd0)
+rm(sgd0)
 
 #run the algo to search opt P,Q
 
 L_rate = 0.05
 lambda = 1 
 batch_size = 30
-epochs = 3000
-n <- length(R) #change all the y in below into R
-learning_log <- vector("list", epochs)
+epochs = 5000*4
+n <- length(R0) #change all the y in below into R
+learning_log0 <- vector("list", epochs)
 
 for (t in 1:epochs){
   
@@ -223,7 +223,7 @@ for (t in 1:epochs){
   
   for (ui in batch_id){
     
-    err_ui <- c(P[, U_i0[ui]] %*% Q[, M_j0[ui]] - R[ui]) 
+    err_ui <- c(P[, U_i0[ui]] %*% Q[, M_j0[ui]] - R0[ui]) 
     nabla_p <- err_ui * Q[, M_j0[ui]]  + lambda * P[,U_i0[ui]]
     nabla_q <- err_ui * P[, U_i0[ui]]  + lambda * Q[,M_j0[ui]]
     
@@ -234,14 +234,14 @@ for (t in 1:epochs){
   }
   
   err <- sapply(1:n, function(j){
-    P[, U_i0[j]] %*% Q[, M_j0[j]] - R[j]
+    P[, U_i0[j]] %*% Q[, M_j0[j]] - R0[j]
   })
-  learning_log[[t]] <- sqrt(mean(err * err))
+  learning_log0[[t]] <- sqrt(mean(err * err))
   rm(err, batch_id)
 }
 
-learning_log <- unlist(learning_log)
-qplot(x = c(1:3000), y = learning_log[1:3000])
+learning_log0 <- unlist(learning_log0)
+qplot(x = c(1:epochs), y = learning_log0[1:epochs])
 rm(L_rate, lambda, t, ui)
 
 colnames(P) <- userId$userId %>% as.character()
@@ -263,8 +263,8 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
            err = pred - rating)]
 
 sqrt(mean(pred$err * pred$err))
-rm(f_sgd, gen_bias)
-rm(pred, P, Q)
+rm(f_sgd, pred, learning_log0)
+rm(P, Q)
 ###########
 
 rtable_tr <- transpose(rtable, keep.names = "movieId", 
