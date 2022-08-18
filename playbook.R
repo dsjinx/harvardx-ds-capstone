@@ -169,7 +169,7 @@ M_j0 <- rep(1:rtable_y0@Dim[2], diff(rtable_y0@p))
 rm(rtable, residual_train)
 
 #P Q starter matrix for sgd
-f <- 80
+f <- 160
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f*rtable_y0@Dim[1], 0, 1), nrow = f)
 set.seed(4, sample.kind = "Rounding")
@@ -202,18 +202,18 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
 }
 
 sgd0 <- sgd(P = P, Q = Q , y = R0, 
-            L_rate = 0.05, lambda = 1, 
-            batch_size = 30, epochs = 5000*3)
+            L_rate = 0.03, lambda = 1, 
+            batch_size = 30, epochs = 5000)
 sgd0 <- unlist(sgd0)
-qplot(x = c(1:(5000*3)), y = sgd0)
+qplot(x = c(1:(5000)), y = sgd0)
 rm(sgd0)
 
 #run the algo to search opt P,Q
 
-L_rate = 0.05
+L_rate = 0.03
 lambda = 1 
 batch_size = 30
-epochs = 5000*4
+epochs = 5000*5
 n <- length(R0) #change all the y in below into R
 learning_log0 <- vector("list", epochs)
 
@@ -239,10 +239,11 @@ for (t in 1:epochs){
   learning_log0[[t]] <- sqrt(mean(err * err))
   rm(err, batch_id)
 }
+rm(t,ui)
 
 learning_log0 <- unlist(learning_log0)
 qplot(x = c(1:epochs), y = learning_log0[1:epochs])
-rm(L_rate, lambda, t, ui)
+rm(L_rate, lambda)
 
 colnames(P) <- userId$userId %>% as.character()
 colnames(Q) <- movieId
