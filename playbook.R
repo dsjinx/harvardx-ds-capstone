@@ -5,7 +5,6 @@ library(Matrix)
 library(doParallel)
 library(glmnet)
 
-
 #load the edx data from misc folder
 #create a sample out of edx, and make a pair of train/test sets  
 
@@ -141,8 +140,7 @@ rm(j, genres, ind, m_gen, gen_cat, gen_mean, m_n)
 #rating residual table from the train set: rating - (g_mean + u_bias + m_bias)
 residual_train <- m_bias[u_bias[sample_train, on = .(userId)]
                          , on = .(movieId)][
-                           , .(resid = g_mean + u_bias + m_bias - rating), 
-                            by = .(userId, movieId)]
+                           , resid := g_mean + u_bias + m_bias - rating]
 sum(residual_train$resid == 0) #check overfittings 
 
 #QQ plot to check the distribution
@@ -158,6 +156,118 @@ rm(p, r_quantile, n_quantile)
 rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
 movieId <- names(rtable[,-1])
+userId <- rtable[,1]
+
+############sgd0
+rtable_y0 <- setnafill(rtable[,-1], fill = 0)
+rtable_y0 <- as(as.matrix(rtable_y0), "sparseMatrix")
+R0 <- rtable_y0@x #training resid
+U_i0 <- rtable_y0@i + 1 #row index of resid (user) 
+#col index of resid (movie)
+M_j0 <- rep(1:rtable_y0@Dim[2], diff(rtable_y0@p))
+
+rm(rtable, residual_train)
+
+#P Q starter matrix for sgd
+f <- 160
+set.seed(3, sample.kind = "Rounding")
+P <- matrix(runif(f*rtable_y0@Dim[1], 0, 1), nrow = f)
+set.seed(4, sample.kind = "Rounding")
+Q <- matrix(runif(f*rtable_y0@Dim[2], 0, 1), nrow = f)
+
+sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
+  n <- length(y) 
+  learning_log <- vector("list", epochs)
+  
+  for (t in 1:epochs){
+    
+    batch_id <- sample(1:n, batch_size, replace = FALSE)
+    
+    for (ui in batch_id){
+      
+      err_ui <- c(P[, U_i0[ui]] %*% Q[, M_j0[ui]] - y[ui]) 
+      nabla_p <- err_ui * Q[, M_j0[ui]]  + lambda * P[,U_i0[ui]]
+      nabla_q <- err_ui * P[, U_i0[ui]]  + lambda * Q[,M_j0[ui]]
+      
+      P[, U_i0[ui]] <- P[, U_i0[ui]] - L_rate * nabla_p
+      Q[, M_j0[ui]] <- Q[, M_j0[ui]] - L_rate * nabla_q
+    }
+    
+    err <- sapply(1:n, function(j){
+      P[, U_i0[j]] %*% Q[, M_j0[j]] - y[j]
+    })
+    learning_log[[t]] <- sqrt(mean(err * err))
+  }
+  return(learning_log)
+}
+
+sgd0 <- sgd(P = P, Q = Q , y = R0, 
+            L_rate = 0.03, lambda = 1, 
+            batch_size = 30, epochs = 5000)
+sgd0 <- unlist(sgd0)
+qplot(x = c(1:(5000)), y = sgd0)
+rm(sgd0)
+
+#run the algo to search opt P,Q
+
+L_rate = 0.03
+lambda = 1 
+batch_size = 30
+epochs = 5000*5
+n <- length(R0) #change all the y in below into R
+learning_log0 <- vector("list", epochs)
+
+for (t in 1:epochs){
+  
+  batch_id <- sample(1:n, batch_size, replace = FALSE)
+  
+  for (ui in batch_id){
+    
+    err_ui <- c(P[, U_i0[ui]] %*% Q[, M_j0[ui]] - R0[ui]) 
+    nabla_p <- err_ui * Q[, M_j0[ui]]  + lambda * P[,U_i0[ui]]
+    nabla_q <- err_ui * P[, U_i0[ui]]  + lambda * Q[,M_j0[ui]]
+    
+    P[, U_i0[ui]] <- P[, U_i0[ui]] - L_rate * nabla_p
+    Q[, M_j0[ui]] <- Q[, M_j0[ui]] - L_rate * nabla_q
+    
+    rm(err_ui, nabla_p, nabla_q)
+  }
+  
+  err <- sapply(1:n, function(j){
+    P[, U_i0[j]] %*% Q[, M_j0[j]] - R0[j]
+  })
+  learning_log0[[t]] <- sqrt(mean(err * err))
+  rm(err, batch_id)
+}
+rm(t,ui)
+
+learning_log0 <- unlist(learning_log0)
+qplot(x = c(1:epochs), y = learning_log0[1:epochs])
+rm(L_rate, lambda)
+
+colnames(P) <- userId$userId %>% as.character()
+colnames(Q) <- movieId
+
+#val
+uid_test <- sample_test$userId %>% as.character()
+mid_test <- sample_test$movieId %>% as.character()
+
+i <- length(uid_test)
+f_sgd <- foreach(i = 1:i, .combine ="c") %dopar% {
+  P[, uid_test[i]] %*% Q[, mid_test[i]]
+}
+rm(i)
+
+pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
+  , f_sgd := f_sgd], on = .(userId)], on = .(movieId)][
+    , ":="(pred = pred <- g_mean + u_bias + m_bias - f_sgd, 
+           err = pred - rating)]
+
+sqrt(mean(pred$err * pred$err))
+rm(f_sgd, pred, learning_log0)
+rm(P, Q)
+###########
+
 rtable_tr <- transpose(rtable, keep.names = "movieId", 
                       make.names = "userId")
 rtable_tr$movieId <- as.numeric(rtable_tr$movieId)
@@ -301,7 +411,7 @@ U_i <- rtable_gen@i + 1 #row index of resid (user)
 M_j <- rep(1:rtable_gen@Dim[2], diff(rtable_gen@p))
 
 #P Q starter matrix for sgd
-f <- 100
+f <- 30
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
 set.seed(4, sample.kind = "Rounding")
@@ -354,15 +464,15 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
 }
 
 sgdl <- sgd(P = P, Q = Q , y = R, 
-                       L_rate = 0.01, lambda = 5, 
-                       batch_size = 30, epochs = 1500)
+                       L_rate = 0.05, lambda = 1, 
+                       batch_size = 30, epochs = 3000)
 sgdl <- unlist(sgdl)
-qplot(x = c(1:1500), y = sgdl)
+qplot(x = c(1:3000), y = sgdl)
 rm(sgdl)
 
 #run the algo to search opt P,Q
 ######################
-L_rate = 0.00001
+L_rate = 0.000
 lambda = 1 
 batch_size = 30
 epochs = 3000
@@ -416,12 +526,12 @@ rm(i)
 pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
   , ":="(gen_bias = gen_bias, f_sgd = f_sgd)], on = .(userId)], 
   on = .(movieId)][
-    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - 0*f_sgd, 
+    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - f_sgd, 
             err = pred - rating)]
 
 sqrt(mean(pred$err * pred$err))
 rm(f_sgd, gen_bias)
-
+rm(pred, P, Q)
 ###########
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
