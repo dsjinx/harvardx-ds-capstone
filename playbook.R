@@ -1,6 +1,5 @@
 library(tidyverse)
 library(data.table)
-library(stringr)
 library(caret)
 library(Matrix)
 library(doParallel)
@@ -43,8 +42,6 @@ for(k in 1:5){
     semi_join(train_cv[[k]], by = "movieId") %>% 
     semi_join(train_cv[[k]], by = "userId")
 }
-
-
 
 rm(k, ind_cv)
 
@@ -104,7 +101,7 @@ m_bias <- sample_train[u_bias, on = .(userId)][
 rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
 
 #genres
-genres <- str_split(sample_train$genres, "\\|") 
+genres <- str_split(sample_train$genres, "\\|")
 gen_cat <- genres %>% unlist() %>% unique()
 n <- length(gen_cat)
 gen_mean <- foreach(g = 1:n, .combine = "c", 
@@ -160,7 +157,6 @@ rm(p, r_quantile, n_quantile)
 
 rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
 sum(!is.na(rtable[,-1]))/(dim(rtable)[1]*(dim(rtable)[2] - 1)) #sparsity
-u_id <- rtable[, 1]
 movieId <- names(rtable[,-1])
 rtable_tr <- transpose(rtable, keep.names = "movieId", 
                       make.names = "userId")
@@ -168,17 +164,19 @@ rtable_tr$movieId <- as.numeric(rtable_tr$movieId)
 m_id_dt <- data.table(movieId = m_id)
 rtable <- rtable_tr[m_id_dt, on = .(movieId)]
 
-rm(rtable_tr, movieId)
+rm(rtable_tr, movieId, m_id, m_id_dt)
 
-rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
+rtable_y <- setnafill(rtable[,-1], fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
 gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
 gen_x <- t(gen_x)
 set.seed(1, sample.kind = "Rounding")
 ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
 
+rm(rtable)
 #choice between fitting data in limited ram with slow for loop
 #speed up the learning with lapply but require bit ram space
+#some how the lappy version does not work on windows
 b <- length(ind_y)
 system.time(u_beta <- lapply(1:b, function(k){
   fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
@@ -189,6 +187,8 @@ system.time(u_beta <- lapply(1:b, function(k){
   coef(fit, s= "lambda.min")}
   )
 )
+rm(b)
+u_beta <- unlist(u_beta)
 
 u_betas <- list()
 system.time(for(k in 1:b){
@@ -207,16 +207,20 @@ u_beta <- unlist(u_beta)
 uid_test <- sample_test$userId %>% as.character()
 mid_test <- sample_test$movieId %>% as.character()
 
-gen_bias <- foreach(i = 1:226, .combine = "c") %dopar% {
+gl <- length(sample_test$genres)
+gen_bias <- foreach(i = 1:gl, .combine = "c") %dopar% {
   gen[,mid_test[i]] %*% u_beta[[uid_test[i]]][-1] + u_beta[[uid_test[i]]][1]
 }
+rm(gl)
 
 pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
     , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
-    , ':='(pred = pred <- g_mean + u_bias + m_bias + gen_bias, 
+    , ':='(pred = pred <- g_mean + u_bias + m_bias - gen_bias, 
            err = pred - rating)]
+
 sqrt(mean(pred$err * pred$err))
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 predb <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
   , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
@@ -229,18 +233,81 @@ sqrt(mean(predb$err * predb$err))
 i <- length(u_beta)
 u_beta_int <- foreach(k = 1:i, .combine = "c") %dopar% {
   u_beta[[k]][1]
+=======
+rm(gen, gen_x, ind_y, rtable_y, gen_bias, pred)
+
+#update the gen_x with trained beta###################
+k <- length(u_beta)
+u_beta_int <- foreach(k = 1:k, .combine = "c") %dopar% {
+  u_beta[[k]][1] + 0
+}
+uid <- names(u_beta) %>% as.numeric()
+u_beta_int <- data.table(uid, u_beta_int)
+rm(k)
+
+residual_alt <- u_beta_int[residual_train, on = .(uid = userId)][
+  , resid_alt := resid - u_beta_int
+]
+rtable_alt <- dcast(residual_alt, uid ~ movieId, value.var = "resid_alt")
+uid_dt <- as.data.table(uid)
+rtable_alt <- rtable_alt[uid_dt, on = .(uid)]
+u_beta_alt <- Matrix(0, nrow = 7612, ncol = (length(u_beta[[1]]) - 1))
+for(i in 1:7612){
+  u_beta_alt[i, ] <- u_beta[[i]][-1]
+>>>>>>> 85845a2d7b252e1bc14a66fe9ea55f65eea33bc9
 }
 >>>>>>> 8cfddb9fa9ed038526fd8b6deb346ede505d652a
 
+rtable_alt_y <- setnafill(rtable_alt[,-1], fill = 0)
+rtable_alt_y <- as(as.matrix(rtable_alt_y), "sparseMatrix")
+
+rm(i, uid, uid_dt, residual_alt, residual_train, rtable_alt)
+
+set.seed(2, sample.kind = "Rounding")
+ind_alt_y <- createFolds(1: rtable_alt_y@Dim[2], 
+                     k = ceiling(rtable_alt_y@Dim[2]/1000))
+k <- length(ind_alt_y)
+gen_alt_x <- lapply(1:k, function(m){
+  temp <- cv.glmnet(u_beta_alt, rtable_alt_y[, ind_alt_y[[m]]], 
+                    family = "mgaussian", intercept = FALSE, 
+                    type.measure = "mse", 
+                    parallel = TRUE, trace.it = TRUE)
+  coef(temp, s = "lambda.min")
+}) #method wont work, predictors are too sparse ->sgd
+rm(k, ind_alt_y)
+
 #sgd
-#rtable_sparse[is.na(rtable_sparse)] <- 0
-resids <- rtable_sparse@x #training resid
-resid_i <- rtable_sparse@i + 1 #row index of resid (user) 
+##################################
+uid_train <- sample_train$userId %>% as.character()
+mid_train <- sample_train$movieId %>% as.character()
+gl <- length(sample_train$genres)
+gen_bias_train <- foreach(i = 1:gl, .combine = "c") %dopar% {
+  gen[,mid_train[i]] %*% u_beta[[uid_train[i]]][-1] + u_beta[[uid_train[i]]][1]
+}
+rm(gl, uid_train, mid_train)
+
+resid_gen <- m_bias[u_bias[sample_train[, .(userId, movieId, rating)][
+  , gen_bias := gen_bias_train], on = .(userId)], on = .(movieId)][
+    , err := g_mean + u_bias + m_bias - gen_bias - rating]
+rtable_gen <- dcast(resid_gen, userId ~ movieId, value.var = "err")
+uid_gen <- rtable_gen[,1]
+mid_gen <- names(rtable_gen)[-1]
+rtable_gen <- setnafill(rtable_gen[,-1], fill = 0)
+rtable_gen <- Matrix(as.matrix(rtable_gen), "sparseMatrix")
+
+R <- rtable_gen@x #training resid
+U_i <- rtable_gen@i + 1 #row index of resid (user) 
 #col index of resid (movie)
-resid_j <- rep(1:rtable_sparse@Dim[2], diff(rtable_sparse@p)) 
+M_j <- rep(1:rtable_gen@Dim[2], diff(rtable_gen@p))
 
-rm(rtable, residual_train)
+#P Q starter matrix for sgd
+f <- 100
+set.seed(3, sample.kind = "Rounding")
+P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
+set.seed(4, sample.kind = "Rounding")
+Q <- matrix(runif(f*rtable_gen@Dim[2], 0, 1), nrow = f)
 
+<<<<<<< HEAD
 #warm start P Q matrix for sgd
 k <- 20
 f_mean <- sqrt(r_mean/k)
@@ -258,6 +325,11 @@ sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
   r <- y
   n <- length(y) #number of training resid
   learning_log <- list()
+=======
+sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
+  n <- length(y) 
+  learning_log <- vector("list", epochs)
+>>>>>>> 85845a2d7b252e1bc14a66fe9ea55f65eea33bc9
   
   for (t in 1:epochs){
     
@@ -265,30 +337,92 @@ sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
     
     for (ui in batch_id){
         
-        err_ui <- c(P[,resid_i[ui]] %*% Q[,resid_j[ui]] - r[ui]) 
-        nabla_p <- err_ui * Q[,resid_j[ui]] / n + lambda_p * P[,resid_i[ui]]
-        nabla_q <- err_ui * P[,resid_i[ui]] / n + lambda_q * Q[,resid_j[ui]]
+        err_ui <- c(P[, U_i[ui]] %*% Q[, M_j[ui]] - y[ui]) 
+        nabla_p <- err_ui * Q[, M_j[ui]]  + lambda * P[,U_i[ui]]
+        nabla_q <- err_ui * P[, U_i[ui]]  + lambda * Q[,M_j[ui]]
         
-        P[,resid_i[ui]] <- P[,resid_i[ui]] - L_rate * nabla_p
-        Q[,resid_j[ui]] <- Q[,resid_j[ui]] - L_rate * nabla_q
+        P[, U_i[ui]] <- P[, U_i[ui]] - L_rate * nabla_p
+        Q[, M_j[ui]] <- Q[, M_j[ui]] - L_rate * nabla_q
     }
     
     err <- sapply(1:n, function(j){
-      P[,resid_i[j]] %*% Q[,resid_j[j]] - r[j]
+      P[, U_i[j]] %*% Q[, M_j[j]] - y[j]
       })
-    learning_log[[t]] <- sqrt(mean(err^2))
-    rm(err)
+    learning_log[[t]] <- sqrt(mean(err * err))
   }
   return(learning_log)
 }
 
-learning_result <- sgd(P = P, Q = Q , y = resids, 
-                       L_rate = 0.6, lambda_p = 0.3, lambda_q = 0.3, 
-                       batch_size = 30, epochs = 500)
-learning_result <- unlist(learning_result)
-qplot(x = c(1:500), y = learning_result)
-rm(learning_result) #clean before restart
+sgdl <- sgd(P = P, Q = Q , y = R, 
+                       L_rate = 0.01, lambda = 5, 
+                       batch_size = 30, epochs = 1500)
+sgdl <- unlist(sgdl)
+qplot(x = c(1:1500), y = sgdl)
+rm(sgdl)
 
+#run the algo to search opt P,Q
+######################
+L_rate = 0.00001
+lambda = 1 
+batch_size = 30
+epochs = 3000
+n <- length(R) #change all the y in below into R
+learning_log <- vector("list", epochs)
+
+for (t in 1:epochs){
+  
+  batch_id <- sample(1:n, batch_size, replace = FALSE)
+  
+  for (ui in batch_id){
+    
+    err_ui <- c(P[, U_i[ui]] %*% Q[, M_j[ui]] - R[ui]) 
+    nabla_p <- err_ui * Q[, M_j[ui]]  + lambda * P[,U_i[ui]]
+    nabla_q <- err_ui * P[, U_i[ui]]  + lambda * Q[,M_j[ui]]
+    
+    P[, U_i[ui]] <- P[, U_i[ui]] - L_rate * nabla_p
+    Q[, M_j[ui]] <- Q[, M_j[ui]] - L_rate * nabla_q
+    
+    rm(err_ui, nabla_p, nabla_q)
+  }
+  
+  err <- sapply(1:n, function(j){
+    P[, U_i[j]] %*% Q[, M_j[j]] - R[j]
+  })
+  learning_log[[t]] <- sqrt(mean(err * err))
+  rm(err, batch_id)
+}
+
+learning_log <- unlist(learning_log)
+qplot(x = c(1:3000), y = learning_log[1:3000])
+rm(L_rate, lambda, t, ui)
+
+colnames(P) <- uid_gen$userId %>% as.character()
+colnames(Q) <- mid_gen
+######################
+#val
+uid_test <- sample_test$userId %>% as.character()
+mid_test <- sample_test$movieId %>% as.character()
+
+i <- length(uid_test)
+gen_bias <- foreach(i = 1:i, .combine = "c") %dopar% {
+  gen[,mid_test[i]] %*% u_beta[[uid_test[i]]][-1] + u_beta[[uid_test[i]]][1]
+}
+
+f_sgd <- foreach(i = 1:i, .combine ="c") %dopar% {
+  P[, uid_test[i]] %*% Q[, mid_test[i]]
+}
+rm(i)
+
+pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
+  , ":="(gen_bias = gen_bias, f_sgd = f_sgd)], on = .(userId)], 
+  on = .(movieId)][
+    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - 0*f_sgd, 
+            err = pred - rating)]
+
+sqrt(mean(pred$err * pred$err))
+rm(f_sgd, gen_bias)
+
+###########
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
 Q <- as.data.frame(Q) %>% setNames(m_id[-1])
