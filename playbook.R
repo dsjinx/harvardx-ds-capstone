@@ -395,7 +395,7 @@ U_i <- rtable_gen@i + 1 #row index of resid (user)
 M_j <- rep(1:rtable_gen@Dim[2], diff(rtable_gen@p))
 
 #P Q starter matrix for sgd
-f <- 30
+f <- 200
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
 set.seed(4, sample.kind = "Rounding")
@@ -428,18 +428,18 @@ sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
 }
 
 sgdl <- sgd(P = P, Q = Q , y = R, 
-                       L_rate = 0.05, lambda = 1, 
-                       batch_size = 30, epochs = 3000)
+                       L_rate = 0.02, lambda = 1, 
+                       batch_size = 30, epochs = 5000)
 sgdl <- unlist(sgdl)
-qplot(x = c(1:3000), y = sgdl)
+qplot(x = c(1:5000), y = sgdl)
 rm(sgdl)
 
 #run the algo to search opt P,Q
 ######################
-L_rate = 0.000
+L_rate = 0.02
 lambda = 1 
 batch_size = 30
-epochs = 3000
+epochs = 10000
 n <- length(R) #change all the y in below into R
 learning_log <- vector("list", epochs)
 
@@ -465,10 +465,11 @@ for (t in 1:epochs){
   learning_log[[t]] <- sqrt(mean(err * err))
   rm(err, batch_id)
 }
+rm(t, ui)
 
 learning_log <- unlist(learning_log)
-qplot(x = c(1:3000), y = learning_log[1:3000])
-rm(L_rate, lambda, t, ui)
+qplot(x = c(1:10000), y = learning_log)
+rm(L_rate, lambda)
 
 colnames(P) <- uid_gen$userId %>% as.character()
 colnames(Q) <- mid_gen
@@ -494,8 +495,8 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
             err = pred - rating)]
 
 sqrt(mean(pred$err * pred$err))
-rm(f_sgd, gen_bias)
-rm(pred, P, Q)
+rm(f_sgd, pred)
+rm(P, Q)
 ###########
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
