@@ -4,6 +4,8 @@ library(caret)
 library(Matrix)
 library(doParallel)
 library(glmnet)
+library(Rcpp)
+library(RcppArmadillo)
 
 #load the edx data from misc folder
 #create a sample out of edx, and make a pair of train/test sets  
@@ -551,6 +553,11 @@ for (t in 1:epochs){
 rm(t, ui)
 learning_log <- unlist(learning_log)
 qplot(x = 1:epochs, y = learning_log)
+
+#####cpp
+
+
+
 ######################
 #val
 uid_test <- sample_test$userId %>% as.character()
@@ -606,6 +613,6 @@ rmse <- function(g_mean, u_bias, m_bias, P, Q, valid){
 rmse(g_mean = g_mean, u_bias = u_bias, m_bias = m_bias, P = P, Q = Q, 
      valid = sample_test)
 
-###NN
+###
 
   
