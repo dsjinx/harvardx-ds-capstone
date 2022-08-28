@@ -4,7 +4,6 @@ library(caret)
 library(Matrix)
 library(doParallel)
 library(glmnet)
-library(Rcpp)
 library(RcppArmadillo)
 
 #load the edx data from misc folder
@@ -491,7 +490,7 @@ Q <- matrix(runif(f_opt*rtable_gen@Dim[2], 0, 1), nrow = f_opt)
 L_rate = 0.01
 lambda = 1 
 batch_size = 30
-epochs = 5000
+epochs = 1000
 n <- length(R) #change all the y in below into R
 learning_log <- vector("list", epochs)
 
@@ -556,7 +555,13 @@ qplot(x = 1:epochs, y = learning_log)
 
 #####cpp
 
+pq <- gd(U_i = U_i, M_j = M_j, y = R, u_n = 7612, m_n = 2867, 
+   factor_n = 130, L_rate = 0.02, lambda = 1, epochs = 1000)
+sum(is.nan(pq$P))
+sum(is.nan(pq$Q))
 
+colnames(pq$P) <- uid_gen$userId %>% as.character()
+colnames(pq$Q) <- mid_gen
 
 ######################
 #val
@@ -569,7 +574,7 @@ gen_bias <- foreach(i = 1:i, .combine = "c") %dopar% {
 }
 
 f_gd <- foreach(i = 1:i, .combine ="c") %dopar% {
-  P[, uid_test[i]] %*% Q[, mid_test[i]]
+  pq$P[, uid_test[i]] %*% pq$Q[, mid_test[i]]
 }
 rm(i)
 
@@ -580,8 +585,8 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
             err = pred - rating)]
 
 sqrt(mean(pred$err * pred$err))
-rm(f_sgd, pred, learning_log)
-rm(P, Q)
+rm(f_gd, pred, pq)
+rm(pq)
 ###########
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
