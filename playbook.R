@@ -556,7 +556,7 @@ qplot(x = 1:epochs, y = learning_log)
 #####cpp
 
 pq <- gd(U_i = U_i, M_j = M_j, y = R, u_n = 7612, m_n = 2867, 
-   factor_n = 130, L_rate = 0.02, lambda = 1, epochs = 1000)
+   factor_n = 130, L_rate = 0.01, lambda = 1, epochs = 10000)
 sum(is.nan(pq$P))
 sum(is.nan(pq$Q))
 
@@ -586,7 +586,7 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
 
 sqrt(mean(pred$err * pred$err))
 rm(f_gd, pred, pq)
-rm(pq)
+rm(pred)
 ###########
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
