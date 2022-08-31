@@ -331,6 +331,20 @@ pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
 
 sqrt(mean(pred$err * pred$err))
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+predb <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
+  , gen_bias := gen_bias], on = .(userId)], on = .(movieId)][
+    , ':='(pred = pred <- g_mean + u_bias + m_bias, 
+           err = pred - rating)]
+sqrt(mean(predb$err * predb$err))
+
+
+=======
+i <- length(u_beta)
+u_beta_int <- foreach(k = 1:i, .combine = "c") %dopar% {
+  u_beta[[k]][1]
+=======
 rm(gen, gen_x, ind_y, rtable_y, gen_bias, pred)
 
 #update the gen_x with trained beta###################
@@ -351,7 +365,9 @@ rtable_alt <- rtable_alt[uid_dt, on = .(uid)]
 u_beta_alt <- Matrix(0, nrow = 7612, ncol = (length(u_beta[[1]]) - 1))
 for(i in 1:7612){
   u_beta_alt[i, ] <- u_beta[[i]][-1]
+>>>>>>> 85845a2d7b252e1bc14a66fe9ea55f65eea33bc9
 }
+>>>>>>> 8cfddb9fa9ed038526fd8b6deb346ede505d652a
 
 rtable_alt_y <- setnafill(rtable_alt[,-1], fill = 0)
 rtable_alt_y <- as(as.matrix(rtable_alt_y), "sparseMatrix")
@@ -402,9 +418,29 @@ P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
 set.seed(4, sample.kind = "Rounding")
 Q <- matrix(runif(f*rtable_gen@Dim[2], 0, 1), nrow = f)
 
+<<<<<<< HEAD
+#warm start P Q matrix for sgd
+k <- 20
+f_mean <- sqrt(r_mean/k)
+f_sd<- r_sd/sqrt(k) #by LNN
+set.seed(0, sample.kind = "Rounding")
+P <- matrix(rnorm(k*rtable_sparse@Dim[1], f_mean, f_sd), nrow = k)
+set.seed(0, sample.kind = "Rounding")
+Q <- matrix(rnorm(k*rtable_sparse@Dim[2], f_mean, f_sd), nrow = k)
+
+sgd <- function(P, Q, y, L_rate, lambda_p, lambda_q, batch_size, epochs){
+  #y: resid to be trained on (rtable_sparse in dgCMatrix sparse format)
+  #lambda_p/q: not tuned, try 
+  #batch_size: sample size out of total number of training resid 
+  #batch_size * epochs should be much larger than length(y) 
+  r <- y
+  n <- length(y) #number of training resid
+  learning_log <- list()
+=======
 sgd <- function(P, Q, y, L_rate, lambda, batch_size, epochs){
   n <- length(y) 
   learning_log <- vector("list", epochs)
+>>>>>>> 85845a2d7b252e1bc14a66fe9ea55f65eea33bc9
   
   for (t in 1:epochs){
     

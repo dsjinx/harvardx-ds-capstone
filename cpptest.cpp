@@ -4,15 +4,13 @@
 using namespace arma;
 
 // [[Rcpp::export]]
-Rcpp::List gd(Rcpp::NumericVector U_i, 
-              Rcpp::NumericVector M_j, 
+Rcpp::List gdt(mat P, mat Q, 
               Rcpp::NumericVector y, 
-              int u_n, int m_n, int factor_n, 
-              double L_rate, double lambda, int epochs){
-  
-  mat P(factor_n, u_n, fill::randu);
-  mat Q(factor_n, m_n, fill::randu);
-  
+              Rcpp::NumericVector U_i,
+              Rcpp::NumericVector M_j,
+              double L_rate, double lambda, 
+              int epochs){
+
   for(int i = 0; i < epochs; i++){
     for(int j = 0; j < y.size(); j++){
       int ui = U_i(j) - 1;
