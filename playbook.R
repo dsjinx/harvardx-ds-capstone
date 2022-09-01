@@ -477,20 +477,19 @@ ftbl <- rbind(ftbl, update)
 
 rm(sgdl, update)
 
-###factor length search
+#####hyperparameters tunning
+###factor length
 lambda <- 1
-L_rate <- 0.02
-epochs <- 5000
-batch_size <- 30
+L_rate <- 0.05
+epochs <- 1000
+batch_size <- 1000
 n <- length(R)
-factors <- seq(100, 200, 10)
+factors <- seq(10, 20, 1)
 f_tune <- foreach(f = factors, .combine = "c") %dopar% {
   set.seed(3, sample.kind = "Rounding")
   P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
   set.seed(4, sample.kind = "Rounding")
   Q <- matrix(runif(f*rtable_gen@Dim[2], 0, 1), nrow = f)
-  
-  learning_log <- vector("list", epochs)
   
   for (t in 1:epochs){
     
@@ -514,14 +513,92 @@ f_tune <- foreach(f = factors, .combine = "c") %dopar% {
 
 qplot(x = factors, y = f_tune)
 f_opt <- factors[which.min(f_tune)]
-#f_opt = 130 to converge at rmse 0.9661905
 rm(f_tune, factors)
+
+###learning rate
+lambda <- 1
+epochs <- 1000
+batch_size <- 1000
+n <- length(R)
 
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f_opt*rtable_gen@Dim[1], 0, 1), nrow = f_opt)
 set.seed(4, sample.kind = "Rounding")
 Q <- matrix(runif(f_opt*rtable_gen@Dim[2], 0, 1), nrow = f_opt)
-#run the algo to search opt P,Q
+
+Lrts <- c(seq(0.1, 1, 0.1), seq(1:5, 1))
+Lr_tune <- foreach(L_rate = Lrts, .combine = "c") %dopar% {
+  
+  for (t in 1:epochs){
+    
+    batch_id <- sample(1:n, batch_size, replace = FALSE)
+    
+    for (ui in batch_id){
+      
+      err_ui <- c(P[, U_i[ui]] %*% Q[, M_j[ui]] - R[ui]) 
+      nabla_p <- err_ui * Q[, M_j[ui]]  + lambda * P[,U_i[ui]]
+      nabla_q <- err_ui * P[, U_i[ui]]  + lambda * Q[,M_j[ui]]
+      
+      P[, U_i[ui]] <- P[, U_i[ui]] - L_rate * nabla_p
+      Q[, M_j[ui]] <- Q[, M_j[ui]] - L_rate * nabla_q
+    }
+  }
+  err <- sapply(1:n, function(j){
+    P[, U_i[j]] %*% Q[, M_j[j]] - R[j]
+  })
+  sqrt(mean(err * err))
+}
+
+qplot(x = Lrts, y = Lr_tune)
+L_rate_opt <- Lrts[which.min(Lr_tune)]
+rm(Lrts, Lr_tune)
+
+#####lambda
+epochs <- 1000
+batch_size <- 1000
+
+set.seed(0, sample.kind = "Roudning")
+Rid_cv <- createFolds(n, 5)
+Rid_cv <- Rid_cv[[1]] %>% unlist()
+
+train_R <- R[-Rid_cv]
+test_R <- R[Rid_cv]
+
+Ui_tr <- U_i[-Rid_cv]
+Ui_tst <- U_i[Rid_cv]
+
+Mj_tr <- M_j[-Rid_cv]
+Mj_tst <- M_j[Rid_cv]
+
+lmds <- c(seq(0.1, 1, 0.1), seq(1, 5, 1))
+lmd_tune <- foreach(lambda = lmds, .combine = "c") %dopar% {
+    tr_n <- length(train_R)
+    tst_n <- length(test_R)
+      
+    for (t in 1:epochs){
+      
+      batch_id <- sample(1:tr_n, batch_size, replace = FALSE)
+      
+      for (ui in batch_id){
+        
+        err_ui <- c(P[, Ui_tr[ui]] %*% Q[, Mj_tr[ui]] - train_R[ui]) 
+        nabla_p <- err_ui * Q[, Mj_tr[ui]]  + lambda * P[,Ui_tr[ui]]
+        nabla_q <- err_ui * P[, Ui_tr[ui]]  + lambda * Q[,Mj_tr[ui]]
+        
+        P[, Ui_tr[ui]] <- P[, Ui_tr[ui]] - L_rate_opt * nabla_p
+        Q[, Mj_tr[ui]] <- Q[, Mj_tr[ui]] - L_rate_opt * nabla_q
+      }
+    }
+    err <- sapply(1:tst_n, function(j){
+      P[, Ui_tst[j]] %*% Q[, Mj_tst[j]] - test_R[j]
+    })
+    sqrt(mean(err * err))
+}
+
+qplot(x = lmds, y = lmd_tune)
+lambda_opt <- lmds[which.min(lmd_tune)]
+rm(lmds, lmd_tune)
+
 ######################
 L_rate = 0.01
 lambda = 1 
