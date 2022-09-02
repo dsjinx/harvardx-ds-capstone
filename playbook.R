@@ -484,7 +484,7 @@ L_rate <- 0.05
 epochs <- 1000
 batch_size <- 1000
 n <- length(R)
-factors <- seq(10, 20, 1)
+factors <- seq(15, 30, 1)
 f_tune <- foreach(f = factors, .combine = "c") %dopar% {
   set.seed(3, sample.kind = "Rounding")
   P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
@@ -511,22 +511,18 @@ f_tune <- foreach(f = factors, .combine = "c") %dopar% {
   sqrt(mean(err * err))
 }
 
-qplot(x = factors, y = f_tune)
+qplot(x = factors, y = f_tune, geom = c("point", "line"))
 f_opt <- factors[which.min(f_tune)]
 rm(f_tune, factors)
 
 ###learning rate
-lambda <- 1
-epochs <- 1000
-batch_size <- 1000
-n <- length(R)
-
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f_opt*rtable_gen@Dim[1], 0, 1), nrow = f_opt)
 set.seed(4, sample.kind = "Rounding")
 Q <- matrix(runif(f_opt*rtable_gen@Dim[2], 0, 1), nrow = f_opt)
 
-Lrts <- c(seq(0.1, 1, 0.1), seq(1:5, 1))
+rm(L_rate)
+Lrts <- seq(0.005, 0.1, 0.001)
 Lr_tune <- foreach(L_rate = Lrts, .combine = "c") %dopar% {
   
   for (t in 1:epochs){
@@ -549,17 +545,19 @@ Lr_tune <- foreach(L_rate = Lrts, .combine = "c") %dopar% {
   sqrt(mean(err * err))
 }
 
-qplot(x = Lrts, y = Lr_tune)
-L_rate_opt <- Lrts[which.min(Lr_tune)]
-rm(Lrts, Lr_tune)
+qplot(x = Lrts, y = Lr_tune, geom = c("point", "line"))
+
+lr_slope <- sapply(1:(length(Lr_tune) - 1), function(k){
+  (Lr_tune[k+1] - Lr_tune[k]) / 0.001})
+qplot(x = Lrts[-length(Lrts)], y = lr_slope, geom = c("point","line"))
+L_rate_opt <- Lrts[which(Lr_tune < 1)][1]
+
+rm(Lrts, Lr_tune, lr_slope)
 
 #####lambda
-epochs <- 1000
-batch_size <- 1000
-
-set.seed(0, sample.kind = "Roudning")
-Rid_cv <- createFolds(n, 5)
-Rid_cv <- Rid_cv[[1]] %>% unlist()
+set.seed(0, sample.kind = "Rounding")
+Rid_cv <- createFolds(1:n, 5)
+Rid_cv <- Rid_cv[[1]]
 
 train_R <- R[-Rid_cv]
 test_R <- R[Rid_cv]
@@ -570,7 +568,7 @@ Ui_tst <- U_i[Rid_cv]
 Mj_tr <- M_j[-Rid_cv]
 Mj_tst <- M_j[Rid_cv]
 
-lmds <- c(seq(0.1, 1, 0.1), seq(1, 5, 1))
+lmds <- seq(10, 20, 1)
 lmd_tune <- foreach(lambda = lmds, .combine = "c") %dopar% {
     tr_n <- length(train_R)
     tst_n <- length(test_R)
@@ -595,14 +593,18 @@ lmd_tune <- foreach(lambda = lmds, .combine = "c") %dopar% {
     sqrt(mean(err * err))
 }
 
-qplot(x = lmds, y = lmd_tune)
+qplot(x = lmds, y = lmd_tune, geom = c("point", "line"))
 lambda_opt <- lmds[which.min(lmd_tune)]
-rm(lmds, lmd_tune)
+
+rm(lmds, lmd_tune, lambda)
+
+####epochs
+
 
 ######################
-L_rate = 0.01
-lambda = 1 
-batch_size = 30
+L_rate = L_rate_opt
+lambda = lambda_opt 
+batch_size = 1000
 epochs = 1000
 n <- length(R) #change all the y in below into R
 learning_log <- vector("list", epochs)
@@ -633,11 +635,28 @@ rm(t, ui)
 
 learning_log <- unlist(learning_log)
 qplot(x = c(1:epochs), y = learning_log)
-rm(L_rate, lambda)
+rm(learning_log)
 
 colnames(P) <- uid_gen$userId %>% as.character()
 colnames(Q) <- mid_gen
 
+f_sgd <- foreach(i = 1:i, .combine ="c") %dopar% {
+  P[, uid_test[i]] %*% Q[, mid_test[i]]
+}
+
+pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
+  , ":="(gen_bias = gen_bias, f_sgd = f_sgd)], on = .(userId)], 
+  on = .(movieId)][
+    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - f_sgd, 
+           err = pred - rating)]
+pred0 <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
+  , ":="(gen_bias = gen_bias, f_sgd = f_sgd)], on = .(userId)], 
+  on = .(movieId)][
+    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - 0*f_sgd, 
+           err = pred - rating)]
+sqrt(mean(pred$err * pred$err)) - sqrt(mean(pred0$err * pred0$err))*0
+rm(pred, pred0, f_sgd)
+rm(P, Q)
 ######gd
 
 for (t in 1:epochs){
@@ -667,9 +686,9 @@ learning_log <- unlist(learning_log)
 qplot(x = 1:epochs, y = learning_log)
 
 #####cpp
-
+set.seed(5, sample.kind = "Rounding")
 pq <- gd(U_i = U_i, M_j = M_j, y = R, u_n = 7612, m_n = 2867, 
-   factor_n = 130, L_rate = 0.01, lambda = 1, epochs = 10000)
+   factor_n = f_opt, L_rate = L_rate_opt, lambda = lambda_opt, epochs = 10)
 sum(is.nan(pq$P))
 sum(is.nan(pq$Q))
 
@@ -686,20 +705,26 @@ gen_bias <- foreach(i = 1:i, .combine = "c") %dopar% {
   gen[,mid_test[i]] %*% u_beta[[uid_test[i]]][-1] + u_beta[[uid_test[i]]][1]
 }
 
-f_gd <- foreach(i = 1:i, .combine ="c") %dopar% {
+f_gdcpp <- foreach(i = 1:i, .combine ="c") %dopar% {
   pq$P[, uid_test[i]] %*% pq$Q[, mid_test[i]]
 }
 rm(i)
 
-pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
-  , ":="(gen_bias = gen_bias, f_gd = f_gd)], on = .(userId)], 
+predcpp <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
+  , ":="(gen_bias = gen_bias, f_gd = f_gdcpp)], on = .(userId)], 
   on = .(movieId)][
     , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - f_gd, 
             err = pred - rating)]
+predcpp0 <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
+  , ":="(gen_bias = gen_bias, f_gd = f_gdcpp)], on = .(userId)], 
+  on = .(movieId)][
+    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - 0*f_gd, 
+           err = pred - rating)]
+sqrt(mean(predcpp$err * predcpp$err))
+sqrt(mean(predcpp$err * predcpp$err)) - sqrt(mean(predcpp0$err * predcpp0$err))
+rm(f_gdcpp, predcpp, predcpp0, pq)
 
-sqrt(mean(pred$err * pred$err))
-rm(f_gd, pred, pq)
-rm(pred)
+rm(pred, pred0, f_sgd)
 ###########
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
