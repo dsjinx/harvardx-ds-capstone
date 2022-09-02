@@ -598,14 +598,11 @@ lambda_opt <- lmds[which.min(lmd_tune)]
 
 rm(lmds, lmd_tune, lambda)
 
-####epochs
-
-
-######################
+###epochs
 L_rate = L_rate_opt
 lambda = lambda_opt 
 batch_size = 1000
-epochs = 1000
+epochs = epochs_choice
 n <- length(R) #change all the y in below into R
 learning_log <- vector("list", epochs)
 
@@ -635,7 +632,13 @@ rm(t, ui)
 
 learning_log <- unlist(learning_log)
 qplot(x = c(1:epochs), y = learning_log)
-rm(learning_log)
+
+learning_slope <- sapply(1:(epochs - 1), function(k){
+  abs(learning_log[k+1] - learning_log[k]) / 1})
+qplot(x = 1:(epochs - 1), y = learning_slope, geom = c("point", "line"))
+epochs_choice <- which(learning_slope <= 0.001)[1]
+
+rm(learning_log, learning_slope, epochs)
 
 colnames(P) <- uid_gen$userId %>% as.character()
 colnames(Q) <- mid_gen
@@ -654,6 +657,7 @@ pred0 <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
   on = .(movieId)][
     , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - 0*f_sgd, 
            err = pred - rating)]
+sqrt(mean(pred$err * pred$err))
 sqrt(mean(pred$err * pred$err)) - sqrt(mean(pred0$err * pred0$err))*0
 rm(pred, pred0, f_sgd)
 rm(P, Q)
@@ -688,7 +692,7 @@ qplot(x = 1:epochs, y = learning_log)
 #####cpp
 set.seed(5, sample.kind = "Rounding")
 pq <- gd(U_i = U_i, M_j = M_j, y = R, u_n = 7612, m_n = 2867, 
-   factor_n = f_opt, L_rate = L_rate_opt, lambda = lambda_opt, epochs = 10)
+   factor_n = f_opt, L_rate = L_rate_opt, lambda = lambda_opt, epochs = 18)
 sum(is.nan(pq$P))
 sum(is.nan(pq$Q))
 
@@ -724,7 +728,6 @@ sqrt(mean(predcpp$err * predcpp$err))
 sqrt(mean(predcpp$err * predcpp$err)) - sqrt(mean(predcpp0$err * predcpp0$err))
 rm(f_gdcpp, predcpp, predcpp0, pq)
 
-rm(pred, pred0, f_sgd)
 ###########
 #validation
 P <- as.data.frame(P) %>% setNames(u_id)
