@@ -548,9 +548,9 @@ Lr_tune <- foreach(L_rate = Lrts, .combine = "c") %dopar% {
 qplot(x = Lrts, y = Lr_tune, geom = c("point", "line"))
 
 lr_slope <- sapply(1:(length(Lr_tune) - 1), function(k){
-  (Lr_tune[k+1] - Lr_tune[k]) / 0.001})
+  abs(Lr_tune[k+1] - Lr_tune[k]) / 0.001})
 qplot(x = Lrts[-length(Lrts)], y = lr_slope, geom = c("point","line"))
-L_rate_opt <- Lrts[which(Lr_tune < 1)][1]
+L_rate_opt <- Lrts[which(Lr_tune < 0.1)][1]
 
 rm(Lrts, Lr_tune, lr_slope)
 
@@ -642,10 +642,18 @@ rm(learning_log, learning_slope, epochs)
 
 colnames(P) <- uid_gen$userId %>% as.character()
 colnames(Q) <- mid_gen
+######
+system.time(f_sgd <- foreach(i = 1:8998, .combine ="c") %dopar% {
+  P[, U_i[i]] %*% Q[, M_j[i]]})
 
-f_sgd <- foreach(i = 1:i, .combine ="c") %dopar% {
-  P[, uid_test[i]] %*% Q[, mid_test[i]]
-}
+system.time(f_pply <- sapply(1:8998, function(i){
+  P[, U_i[i]] %*% Q[, M_j[i]]}))
+######
+system.time(f_sgd <- foreach(i = 1:i, .combine ="c") %dopar% {
+  P[, uid_test[i]] %*% Q[, mid_test[i]]})
+
+system.time(f_pply <- sapply(1:i, function(i){
+  P[, uid_test[i]] %*% Q[, mid_test[i]]}))
 
 pred <- m_bias[u_bias[sample_test[, .(userId, movieId, rating)][
   , ":="(gen_bias = gen_bias, f_sgd = f_sgd)], on = .(userId)], 
