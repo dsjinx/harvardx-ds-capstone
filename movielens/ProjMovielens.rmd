@@ -3,6 +3,7 @@ title: "Movielens edx-PH125.9x"
 author: "Jin Xin"
 date: "Sep, 2022"
 output: pdf_document
+bibliography: references.bib
 ---
 
 an introduction/overview/executive summary section that describes the dataset and summarizes the goal of the project and key steps that were performed
@@ -13,11 +14,142 @@ a results section that presents the modeling results and discusses the model per
 
 a conclusion section that gives a brief summary of the report, its limitations and future work
 
-40 points: The report includes all required sections, is easy to follow with good supporting detail throughout, and is insightful and innovative. 
-##Executive summary
+40 points: The report includes all required sections, is easy to follow with good supporting detail throughout, and is insightful and innovative.
+## Executive summary
+We are going to create a movie recommendation system in this project. This system will predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{?0.80}. The algorithm is based on the Netflix winning latent factor model [@Koren2009], but a rather vanilla version. 
 
-##Methods details
+## Introduction
+This project is inspired by the $1 million prize competition hosted by Netflix in 2006. The rule of winning is to achieve a 10% more improvement on RMSE, comparing to Netflix own in house algorithm. But in this project, we just use a fraction of Netflix competition dataset (our 10m version against the original size of 100m [@Töscher09]). Our goal in here is simply to achieve a \textcolor{blue}{RMSE < 0.86490} between our prediction and validation set ratings.
 
-##Final result
+In the following sessions, we will look into the dataset first to have a macro view, then we will explain details of the methods to achieve the final goal. 
 
-##Conclusion
+## Data exploration
+
+First of all, we use the following code to download and prepare the data we need. The code in below is provided by edx-HarvardX PH125.9x. To successfully obtain the `edx` and `validation` dataset, we need to follow the instructions inside the code chunk below accordingly, with respect to our own computer setup.  
+
+```{r eval=FALSE}
+##########################################################
+# Create edx set, validation set (final hold-out test set)
+##########################################################
+
+# Note: this process could take a couple of minutes
+
+if(!require(tidyverse)) install.packages("tidyverse", 
+                            repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", 
+                            repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", 
+                            repos = "http://cran.us.r-project.org")
+
+library(tidyverse)
+library(caret)
+library(data.table)
+
+# MovieLens 10M dataset:
+# https://grouplens.org/datasets/movielens/10m/
+# http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+dl <- tempfile()
+download.file("https://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+
+ratings <- fread(text = gsub("::", "\t", 
+                             readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), 
+                          "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+
+# if using R 3.6 or earlier:
+movies <- as.data.frame(movies) %>% 
+  mutate(movieId = as.numeric(levels(movieId))[movieId],
+                                            title = as.character(title),
+                                            genres = as.character(genres))
+# if using R 4.0 or later:
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
+                                            title = as.character(title),
+                                            genres = as.character(genres))
+
+
+movielens <- left_join(ratings, movies, by = "movieId")
+
+# Validation set will be 10% of MovieLens data
+# if using R 3.5 or earlier, use `set.seed(1)`
+set.seed(1, sample.kind="Rounding") 
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, 
+                                  list = FALSE)
+edx <- movielens[-test_index,]
+temp <- movielens[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+      semi_join(edx, by = "movieId") %>%
+      semi_join(edx, by = "userId")
+
+# Add rows removed from validation set back into edx set
+removed <- anti_join(temp, validation)
+edx <- rbind(edx, removed)
+
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+```
+
+We will use the `edx` data to develop and train our model, then apply the trained model on the `validation` data to predict the rating with respect to the user/movie pairs, and evaluate the prediction against the real ratings by the **RMSE** method. So let's look at the macro structure of the dataset first. 
+
+```{r include = FALSE}
+# these libraries are used
+library(tidyverse)
+library(data.table)
+library(caret)
+library(Matrix)
+library(doParallel)
+library(glmnet)
+library(RcppArmadillo)
+load("~/Work/Rproj/PH125.9x/harvardx-ds-capstone/misc/edx.Rdata")
+load("~/Work/Rproj/PH125.9x/harvardx-ds-capstone/misc/val.Rdata")
+```
+
+Here is the macro view of `edx` dateset:
+```{r echo = FALSE}
+options(width = 70)
+
+edx %>% tibble()
+```
+
+Here is the macro view of `validation` dataset:
+```{r echo = FALSE}
+options(width = 70)
+
+validation %>% tibble()
+```
+
+Comparing the `edx` and `validation` dataset, we can tell the `edx` is just a longer version of `validation` with different user/movie pairs. When we look into the details of 'edx' dataset, we have:
+```{r echo = FALSE}
+options(width = 70)
+
+str(edx)
+```
+
+In the 6 data frame headers, we can classify them into three groups: user info, movie info, and rating (the joint info). 
+
+For user info, we have 'userId', 'timestamp'. This 'timestamp' is showing the information about when the movie is rated by the user, and in the (Unix Epoch Time)[https://files.grouplens.org/datasets/movielens/ml-10m-README.html] format. 
+
+For movie info, we have 'movieId', 'title', and 'genres'. One thing need to pay attention is that, one movie can be categarised as multiple 'genres'. 
+
+let's look at one example to have a more straight understanding. 
+```{r echo = FALSE}
+options(width = 70)
+
+edx[9, ]
+```
+
+We can tell this user by 'userId' = 1 rated the movie "Lion King" with 'movieId' = 364 for 5 stars on the date of 'r as.Date(as.POSIXct(edx[9,]$timestamp, origin="1970-01-01"))'. 
+The movie "Lion King" was released in 1994, and the movie is categorised as 'r edx[9,]$genres', in total of 5 genres. 
+
+
+## Methods details
+
+## Final result
+
+## Conclusion
+
+## Refnereces
