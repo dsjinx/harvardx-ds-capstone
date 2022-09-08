@@ -16,7 +16,7 @@ a conclusion section that gives a brief summary of the report, its limitations a
 
 40 points: The report includes all required sections, is easy to follow with good supporting detail throughout, and is insightful and innovative.
 ## Executive summary
-We are going to create a movie recommendation system in this project. This system will predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{?0.80}. The algorithm is based on the Netflix winning latent factor model [@Koren2009], but a rather vanilla version. 
+We are going to create a movie recommendation system in this project. This system will predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{?0.80}. The algorithm is based on the Netflix winning latent factor model [@Koren2009], but a rather vanilla version with an extra step of searching user's genres. 
 
 ## Introduction
 This project is inspired by the $1 million prize competition hosted by Netflix in 2006. The rule of winning is to achieve a 10% more improvement on RMSE, comparing to Netflix own in house algorithm. But in this project, we just use a fraction of Netflix competition dataset (our 10m version against the original size of 100m [@Töscher09]). Our goal in here is simply to achieve a \textcolor{blue}{RMSE < 0.86490} between our prediction and validation set ratings.
@@ -122,16 +122,16 @@ options(width = 70)
 validation %>% tibble()
 ```
 
-Comparing the `edx` and `validation` dataset, we can tell the `edx` is just a longer version of `validation` with different user/movie pairs. When we look into the details of 'edx' dataset, we have:
+Comparing the `edx` and `validation` dataset, we can tell the `edx` has the size of 9,000,055 × 6, is just a longer version of `validation` with the size of 999,999 × 6. When we look into the details of 'edx' dataset, we have:
 ```{r echo = FALSE}
 options(width = 70)
 
-str(edx)
+names(edx)
 ```
 
-In the 6 data frame headers, we can classify them into three groups: user info, movie info, and rating (the joint info). 
+In these 6 headers, we can classify them into three groups: user info, movie info, and rating (the joint info). 
 
-For user info, we have 'userId', 'timestamp'. This 'timestamp' is showing the information about when the movie is rated by the user, and in the (Unix Epoch Time)[https://files.grouplens.org/datasets/movielens/ml-10m-README.html] format. 
+For user info, we have 'userId', 'timestamp'. This 'timestamp' is showing the information about when the movie is rated by the user, and in the Unix Epoch Time format [@Harper2016]. 
 
 For movie info, we have 'movieId', 'title', and 'genres'. One thing need to pay attention is that, one movie can be categarised as multiple 'genres'. 
 
@@ -139,17 +139,55 @@ let's look at one example to have a more straight understanding.
 ```{r echo = FALSE}
 options(width = 70)
 
-edx[9, ]
+#we convert the timestamp column over the entire 'edx' set first 
+edx[, timestamp := as.Date(as.POSIXct(timestamp, origin="1970-01-01"))][9,]
 ```
 
-We can tell this user by 'userId' = 1 rated the movie "Lion King" with 'movieId' = 364 for 5 stars on the date of 'r as.Date(as.POSIXct(edx[9,]$timestamp, origin="1970-01-01"))'. 
-The movie "Lion King" was released in 1994, and the movie is categorised as 'r edx[9,]$genres', in total of 5 genres. 
+We can tell this user by 'userId' = 1 rated the movie "Lion King" with 'movieId' = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised as Adventure|Animation|Children|Drama|Musical. 
 
+So our job is to use these user and movie info to predict the 'rating', and the 'rating' is ranged between:
+```{r echo = FALSE}
+range(edx$rating)
+```
+
+We see the range is starting from 0.5, but implicitly the floor of the rating range is **0**. Why does this implicit **0** rating assumption may stand? Let us look at number of user/movie paired ratings we have in 'edx':
+```{r echo = FALSE}
+data.table(user_num = uniqueN(edx$userId),
+           movie_num = uniqueN(edx$movieId),
+           rating_num = length(edx$rating))
+```
+
+Theoretically, there should be: 
+```{r}
+uniqueN(edx$userId) * uniqueN(edx$movieId)
+```
+
+above number of total ratings, but instead we only got 9,000,055 in our dataset. Of course, this is very reasonable, since it is not possible for everyone watched all the movies, and it is also possible for one has watched the movie, but did not rate. In other word, we can view this as a big matrix with the dimension of user_num: 69878 * movie_num: 10677, instead this matrix is highly sparse with only rating_num: 9000055 non zero elements, and the reset are all zero. Mathematically, we call this kind of matrix a \textcolor{blue}{"sparse matrix"}. 
+
+From the code at very beginning helped us get the 'edx' and 'validation' datasets, we can tell the 'validation' data is intentionally built based on users and movies out of 'edx'.
+```{r eval = FALSE}
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+      semi_join(edx, by = "movieId") %>%
+      semi_join(edx, by = "userId")
+```
+
+That 'userId' and 'movieId' mathing process makes the rating matrix of 'validation' be exactly the same as 'edx', so we can further specify our job to be predicting the 'rating' at the 'userId'-'movieId' position in the big \textcolor{blue}{sparse matrix}.
+
+After we identified our problem mathematically, one of the most popular algorithm to solve this problem is \textcolor{blue}{Matrix Factorisation Model} by @Koren2009. so we will imitate this $1 million algorithm, but in a rather simple way with an extra step of searching user's genres info, which is not included in the dataset. 
 
 ## Methods details
+
+Before we get into the details of our algorithm, we will build some heuristic understanding on it first. 
+
+The central idea of our algorithm, as well as the one by @Koren2009, is matrix factorisation. More specifically, it is the idea of PCA or SVD in linear algebra. Linear algebra tells us every matrix 
 
 ## Final result
 
 ## Conclusion
 
 ## Refnereces
+
+<div id="refs"></div>
+
+## Appendix
