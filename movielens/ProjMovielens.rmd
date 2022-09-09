@@ -16,7 +16,7 @@ a conclusion section that gives a brief summary of the report, its limitations a
 
 40 points: The report includes all required sections, is easy to follow with good supporting detail throughout, and is insightful and innovative.
 ## Executive summary
-We are going to create a movie recommendation system in this project. This system will predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{?0.80}. The algorithm is based on the Netflix winning latent factor model [@Koren2009], but a rather vanilla version with an extra step of searching user's genres. 
+We are going to create a movie recommendation system in this project. This system will predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{?0.80}. The algorithm is based on the Netflix winning latent factor method [@Koren2009], but a rather vanilla version with an extra step of searching user's genres. 
 
 ## Introduction
 This project is inspired by the $1 million prize competition hosted by Netflix in 2006. The rule of winning is to achieve a 10% more improvement on RMSE, comparing to Netflix own in house algorithm. But in this project, we just use a fraction of Netflix competition dataset (our 10m version against the original size of 100m [@Töscher09]). Our goal in here is simply to achieve a \textcolor{blue}{RMSE < 0.86490} between our prediction and validation set ratings.
@@ -25,7 +25,7 @@ In the following sessions, we will look into the dataset first to have a macro v
 
 ## Data exploration
 
-First of all, we use the following code to download and prepare the data we need. The code in below is provided by edx-HarvardX PH125.9x. To successfully obtain the `edx` and `validation` dataset, we need to follow the instructions inside the code chunk below accordingly, with respect to our own computer setup.  
+First of all, we use the following code to download and prepare the data we need. The code in below is provided by edx-HarvardX PH125.9x teaching team. To successfully obtain the `edx` and `validation` dataset, we need to follow the instructions inside the code chunk below accordingly, with respect to our own computer setup.  
 
 ```{r eval=FALSE}
 ##########################################################
@@ -162,9 +162,9 @@ Theoretically, there should be:
 uniqueN(edx$userId) * uniqueN(edx$movieId)
 ```
 
-above number of total ratings, but instead we only got 9,000,055 in our dataset. Of course, this is very reasonable, since it is not possible for everyone watched all the movies, and it is also possible for one has watched the movie, but did not rate. In other word, we can view this as a big matrix with the dimension of user_num: 69878 * movie_num: 10677, instead this matrix is highly sparse with only rating_num: 9000055 non zero elements, and the reset are all zero. Mathematically, we call this kind of matrix a \textcolor{blue}{"sparse matrix"}. 
+above number of total ratings, but instead we only got 9,000,055 in our dataset. Of course, this is very reasonable, since it is not possible for everyone watched all the movies, and it is also possible for one has watched the movie, but did not rate it. In other word, we can view this as a big matrix with the dimension of user_num: 69878 * movie_num: 10677, however this matrix is highly sparse with only rating_num: 9,000,055 non zero elements, and the reset are all zero. Mathematically, we call this kind of matrix a \textcolor{blue}{"sparse matrix"}. 
 
-From the code at very beginning helped us get the 'edx' and 'validation' datasets, we can tell the 'validation' data is intentionally built based on users and movies out of 'edx'.
+From the code at very beginning helped us get the 'edx' and 'validation' datasets, we can tell the 'validation' data is intentionally built based on users and movies of 'edx', which we will use for our algorithm development.
 ```{r eval = FALSE}
 # Make sure userId and movieId in validation set are also in edx set
 validation <- temp %>% 
@@ -172,15 +172,51 @@ validation <- temp %>%
       semi_join(edx, by = "userId")
 ```
 
-That 'userId' and 'movieId' mathing process makes the rating matrix of 'validation' be exactly the same as 'edx', so we can further specify our job to be predicting the 'rating' at the 'userId'-'movieId' position in the big \textcolor{blue}{sparse matrix}.
+That 'userId' and 'movieId' matching process makes the rating matrix of 'validation' be exactly the same as 'edx', so we can further specify our job to be predicting the 'rating' at the corresponding 'userId'-'movieId' position in the big \textcolor{blue}{sparse matrix}, based on the known elements are given by 'edx' dataset. Then it becomes to estimate an element value inside a sparse matrix problem.
 
-After we identified our problem mathematically, one of the most popular algorithm to solve this problem is \textcolor{blue}{Matrix Factorisation Model} by @Koren2009. so we will imitate this $1 million algorithm, but in a rather simple way with an extra step of searching user's genres info, which is not included in the dataset. 
+After we identified our problem mathematically, one of the most popular algorithm to solve this problem is \textcolor{blue}{Latent Factor method} by @Koren2009. so we will imitate this $1 million algorithm, but in a rather simple way with an extra step of searching user's genres info, which is not included in the dataset. 
 
 ## Methods details
 
 Before we get into the details of our algorithm, we will build some heuristic understanding on it first. 
 
-The central idea of our algorithm, as well as the one by @Koren2009, is matrix factorisation. More specifically, it is the idea of PCA or SVD in linear algebra. Linear algebra tells us every matrix 
+The central idea of our algorithm, as well as the one by @Koren2009, is matrix factorisation. More specifically, it is the idea of PCA or SVD in linear algebra, but on the opposite way. As described by @Bell2007, PCA is the idea of rank minimisation for a dense matrix with no missing entry, but our user-movie rating matrix is highly sparse with most entries are missing, so we are going the opposite way of rank reduction, we are estimating the rank up from zero. To justify our approach, let's break it into two parts: 1, rating matrix factorisation; 2, factor searching. 
+
+Because PCA is just a slim version of SVD, let's build some foundation on SVD first. @Strang2016 tells us any matrix can be factorised by SVD, even the rank 1 matrix: 
+$$
+A = U\Sigma V^{T}
+$$
+In the above SVD formula, assume A is a m(rows) by n(cols) matrix, where U is a m(rows) by m(cols) square matrix composed by singular vectors in A's column space $R^{m}$, which captures the feature information of the rows. The V is a n(rows) by n(cols) square matrix composed by singular vectors in A's row space $R^{n}$, which captures the feature information of the columns. Lastly, the $\Sigma$ is a m(rows) by n(cols) diagonal matrix contains f number of singular values of A with the reset min(m,n) - f are all 0's, where f $\leq$ min(m, n). Here is an example of m = 5, f = 3, n = 4 to demonstrate the $\Sigma$:
+$$\Sigma = \begin{bmatrix}\sigma_1 & 0 & 0 & 0\\
+0 & \sigma_2 & 0 & 0\\
+0 & 0 & \sigma_3 & 0\\
+0 & 0 & 0 & 0\\
+0 & 0 & 0 & 0\\
+\end{bmatrix}$$
+This number f is critical to us, since it defines how many critical factors is contained in A. We also mentioned before the PCA, the slim version SVD, can help us reduce ranks of A without loosing critical information according to the Eckart-Young theorem [@Strang2019]. So we can use this f, or k $\leq$ f more specifically, to shrink the U and V into m by k, and n by k matrix respectively, and this will still enable us to recover a good estimation of A with a smaller U, V through the matrix multiplication. Here we only abstract the key information of SVD and PCA to help us build the foundation of our algorithm, for further details on the topic, this book @Strang2016 will give a comprehensive explanation. 
+
+Now let's apply the standard SVD formula into our scenario, and rewrite it as:
+$$
+R = PIQ^{T}
+$$
+Then R is a user_num(rows) by movie_num(cols) rating matrix, P is a user_num(rows) by f(cols) matrix, I is an f(rows) by f(cols) identity matrix, Q is a movie_num(rows) by f(cols) matrix. And what the f is the key to derive our latent factor algorithm. We are assuming there are f fixed number of hidden factors pertained to each user and each movie, according to the matrix multiplication in above, for each element in R can be arrived by:
+$$
+r_{ui} = \vec{p_u}^{T}\cdot1\cdot\vec{q_i}
+$$
+The 1 in between $\vec{p_u}^{T}$ and $\vec{q_i}$ can be neglected. we also need to clarify that the $\vec{p_u}^{T}$ is the u-th row of P matrix in above, and same for $\vec{q_i}$ is the i-th column of Q matrix. We are putting the transpose sign on $\vec{p}$ by removing it from $\vec{q}$, is making the equation of $r_{ui}$ to be more linear algebra naturally to the readers. And the length of each $\vec{p_u}$ and $\vec{q_i}$ are the same to be _f_. So with the above understanding, we can remake the R matrix to be more convenient to serve our purpose:
+$$
+R_{lfm} = P^{T}\cdot Q
+$$
+Where P is a factor_num by user_num matrix, and Q is a factor_num by movie_num matrix, so $R_{lfm}$ is a user_num by movie_num matrix, and for notation convenient, we will use R to indicate $R_{lfm}$ in reset of the report.
+
+By inspecting the R matrix equation, to be successfully making the estimation on any R element $r_{ui}$, we need the corresponding $\vec{p_u}$ and $\vec{q_i}$. So how can we get this latent factor vector for each user and movie? @Bell2007 solved it by the idea of minimising the loss function ${\frac{1}{2}\|P^{T}\cdot Q - R\|_F^2}$ with the alternating gradient descent, and the alternating iterations here beautifully solved the problem of both P and Q are unknown to us at beginning, the iteration will be like this:
+$$
+P_{t+1} = P_t - Q_t\cdot(P_t^{T}Q_t - R)^{T}
+$$
+$$
+Q_{t+1} = Q_t - P_t\cdot(P_tQ_t - R)
+$$
+The above alternations are not efficient with our sparse matrix scenario though, we just use them as a demonstration, and we will tweak them to fit our purpose later, when we get into the details of calculation process. For more details on gradient descent and why it works, this book @Strang2019 covers all the essentials. Only to have a heuristic understanding about gradient descent, geometrically we are having a convex loss function, because ${\frac{1}{2}\|P^{T}\cdot Q - R\|_F^2}$ $\geq$ 0 is positive semidefinite, ideally a rather simple case is loss function > 0 a positive definite matrix. Then the bottom point of the bowl is the minimum of the loss function 
 
 ## Final result
 
