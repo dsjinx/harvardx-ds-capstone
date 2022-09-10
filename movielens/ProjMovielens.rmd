@@ -241,14 +241,17 @@ The global mean we just got is the centre of all the available ratings, so it is
 
 How can we find the best u_bias for each user? We aim for minimise the $RMSE$:
 $$RMSE = \sqrt{\frac{\sum_{ui \in N}(\hat{r_{ui}} - r_{ui})^2}{N}}$$ 
-So we just use the RMSE as our loss function to be minimised for all the computations. In the u_bias case, we are aiming for getting the best u_bias so that RMSE can be minimised with the set up of $\hat{r_{ui}} = g\_mean + u\_bias$. 
+For the sake of simplicity, we will only work on the inner part (squared error), and construct our loss function:
+$$
+Loss = \frac{1}{2N} \sum_{ui \in N}(\hat{r_{ui}} - r_{ui})^2
+$$
+we are aiming for getting the best u_bias so that RMSE can be minimised with the set up of $\hat{r_{ui}} = g\_mean + u\_bias$. 
 
-And what's more, there are active users who rates every movie she watched, and lazy users who rarely rate, so we introduce the regularisation factor ${\lambda}$ to avoid the over fitting risk, so the new regularised RMSE becomes to be:
-```{r eval = FALSE}
-
-```
-
-
+And what's more, there are active users who rates every movie she watched, and lazy users who rarely rate, so we introduce the regularisation factor ${\lambda}$ to avoid the over fitting risk, so the new regularised loss function becomes to be:
+$$
+Loss = \frac{1}{2} \sum_{i \in N}(\hat{r_{ui}} - r_{ui})^2 + \frac{\lambda}{2N} \sum_{i \in N}b_u^2
+$$
+We dropped the u from ui in the $\Sigma$ sign, because we are estimating each user's bias individually based on the all the movies rated by her. We also dropped the N from the first part of $\frac{1}{2N}$ to make our computation formula of $b_u$ to be consistent with the Professor Irizarry's text book, some one may prefer to keep it, that is just personal choice, it will only alter the $\lambda$ result, but the final $b_u$ should not vary much.   
 
 
 ## Final result
