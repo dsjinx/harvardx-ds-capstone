@@ -135,14 +135,14 @@ For user info, we have 'userId', 'timestamp'. This 'timestamp' is showing the in
 For movie info, we have 'movieId', 'title', and 'genres'. One thing need to pay attention is that, one movie can be categarised as multiple 'genres'. 
 
 let's look at one example to have a more straight understanding. 
-```{r echo = FALSE}
+```{r}
 options(width = 70)
 
 #we convert the timestamp column over the entire 'edx' set first 
 edx[, timestamp := as.Date(as.POSIXct(timestamp, origin="1970-01-01"))][9,]
 ```
 
-We can tell this user by 'userId' = 1 rated the movie "Lion King" with 'movieId' = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised as Adventure|Animation|Children|Drama|Musical. 
+We can tell this user by 'userId' = 1 rated the movie "Lion King" with 'movieId' = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised under Adventure|Animation|Children|Drama|Musical. 
 
 So our job is to use these user and movie info to predict the 'rating', and the 'rating' is ranged between:
 ```{r echo = FALSE}
@@ -153,7 +153,7 @@ We see the range is starting from 0.5, but implicitly the floor of the rating ra
 ```{r echo = FALSE}
 df_sparse <- data.table(x = c("user_num", "movie_num", "rating_num"),
           y = c(uniqueN(edx$userId), uniqueN(edx$movieId), uniqueN(edx$rating)))
-ggplot(df_sparse, aes(x, y)) + geom_bar(stat = "identity", aes(y = log(y)))
+ggplot(df_sparse, aes(x, y = log(x_num))) + geom_bar(stat = "identity", aes(y = log(y)), width = 0.4)
 rm(df_sparse)
 ```
 
@@ -220,7 +220,7 @@ RMSE_{matrix} = \|P^{T}Q - R\|_F
 $$
 up to now, we have built enough understanding to proceed with our algorithm, but we still miss one important part, the number of latent factors to construct each user vector and movie vector, we will leave it at the end within the last step of the computation. With the above foundation, we are ready to get into the computations now. 
 
-###Preprocessing
+###Centralisation
 Instead apply our latent factor algorithm, we need to centralise user-movie rating matrix first. Traditionally, we only centeralise the measurements vectors in SVD. In our rating matrix, there are tow kinds of measurements, users and movies. If we treat each user as a measurement, then each movie is a sample point, conversely, we treat each movie as a measurement, then each user is a sample point. 
 $$
 R = \begin{bmatrix} \vec{User_1}^{T}\\
@@ -234,8 +234,22 @@ r_{u1} & \ldots & r_{ui}
 $$
 So in our rating matrix, we have to centralise in both row and column directions simultaneously. To stress the simultaneous centralisation, we are not performing the de-mean on one direction then the other, instead we treat the rating $r_{ui}$ to be in its own r-th dimension, because $r_{ui}$ is the result of some function $f(\vec{user_u}, \vec{movie_i})$. One more thing to consider is the sparsity of our rating matrix, there are very few $r_{ui}$ are known to us, and we don't know whether the user watched the movie, or she just could not be bothered to rate it. So instead impute the missing value places of the matrix with 0's, we just exclude them from our computation. The other reason of doing so is, we will get a 0 mean, because those 0's adding no value to the sum of all ratings, but making our divisor enormously large. 
 ```{r eval = FALSE}
+#global mean
+g_mean <- mean(edx$rating)
+```
+The global mean we just got is the centre of all the available ratings, so it is neither the mean of any user nor mean of any movie. But we can assume this global mean is the centre of all the means of every user, as well as cenre of all the means of each movie, so we can estimate each user's real mean by $User_u\_mean = g\_mean + u\_bias$. 
+
+How can we find the best u_bias for each user? We aim for minimise the $RMSE$:
+$$RMSE = \sqrt{\frac{\sum_{ui \in N}(\hat{r_{ui}} - r_{ui})^2}{N}}$$ 
+So we just use the RMSE as our loss function to be minimised for all the computations. In the u_bias case, we are aiming for getting the best u_bias so that RMSE can be minimised with the set up of $\hat{r_{ui}} = g\_mean + u\_bias$. 
+
+And what's more, there are active users who rates every movie she watched, and lazy users who rarely rate, so we introduce the regularisation factor ${\lambda}$ to avoid the over fitting risk, so the new regularised RMSE becomes to be:
+```{r eval = FALSE}
 
 ```
+
+
+
 
 ## Final result
 
