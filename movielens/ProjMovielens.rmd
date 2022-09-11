@@ -159,7 +159,7 @@ sample <- edx[, timestamp :=
 knitr::kable(sample)
 ```
 
-We can tell this user by 'userId' = 1 rated the movie "Lion King" with 'movieId' = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised under Adventure|Animation|Children|Drama|Musical. 
+We can tell this user by 'userId' = 1 rated the movie "The Lion King" with 'movieId' = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised under Adventure|Animation|Children|Drama|Musical. 
 
 So our job is to use these user and movie info to predict the 'rating', and the 'rating' is ranged between:
 ```{r echo = FALSE}
@@ -413,13 +413,32 @@ rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
 By now, we have finished the centralisation process under 
 $\bar{r_{ui}} = \bar{r_{g}} + b_u + b_m$. We have to stress that this $\bar{r_{ui}}$ varies on different user-movie combinations, so it can be generalised across all the elements of our Rating matrix, regardless the $r_{ui}$ is known to us or not. This generalisation property makes it to be versatile in the predictions. 
 
-###User Genres
+###Genres bias
 ```{r, echo = FALSE}
 options(width = 70)
 
 knitr::kable(edx[9,])
 ```
-We use the beginning example to remind ourselves that, the 'genres' information of each movie are given, so heuristically we can make the assumption that each user also has some preference toward some particular genres. 
+We use the beginning example to remind ourselves that, the 'genres' information of each movie are given, simultaneously we can an assumption that each user also has some preferences toward some particular genres, we call it user genre bias $g_u$. Instead of being a single numeric value, we assume that $\vec{g_u}$ is a vector, why? That vector assumption is inspired from the movie genres. In above "The Lion King" example, we see the genres are categorised as: 
+```{r}
+edx[9,]$genres
+```
+One movie has multiple genres, but we can not quantify which genre is dominant. This multi-genres attribute is also applicable to users, like the same example we just used, we can not tell the user $1$ rated "The Lion King" $5$ star is because she likes the the adventure genre, the animation genre, or the musical genre of the movie, we don't know what her dominant genre taste is. And it is also possible like the movie, she likes all the 5 genres in the movie, but out of those 5 she might have stronger preference on musical genre over the rest. 
+
+Now we have enough reason to not only take the user genre $\vec{g_u}$ as a vector, but also treat the movie genre as a vector $\vec{g_m}$ too. So to combine them together, we assume there is a genre bias $b_g = \vec{g_m} \cdot \vec{g_u}$. Next let's find the $\vec{g_m}$ for each movie, then use those movie $\vec{g_m}$ to find $\vec{g_u}$ for each user, after all we can use them to construct the $b_g$ in regard to different 'userId'-'movieId' pairs in our prediction. 
+
+Since we are given the genres of movie already, so we will start with constructing each movie's genre vector $\vec{g_m}$ first. Let's begin with some data cleaning on the grenes column to remove the "|". 
+```{r eval = FALSE}
+
+genres <- str_split(edx$genres, "\\|")
+
+gen_cat <- genres %>% unlist() %>% unique()
+
+n <- length(gen_cat) 
+
+#only one movie(#8606) has no gen info,
+#otherwise we have to exclude those from following process
+```
 
 ## Final result
 
