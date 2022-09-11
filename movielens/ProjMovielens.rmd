@@ -111,17 +111,31 @@ Here is the macro view of `edx` dateset:
 ```{r echo = FALSE}
 options(width = 70)
 
-edx %>% tibble()
+edx_temp <- head(edx)
+knitr::kable(edx_temp)
 ```
 
 Here is the macro view of `validation` dataset:
 ```{r echo = FALSE}
 options(width = 70)
 
-validation %>% tibble()
+val_temp <- head(validation)
+knitr::kable(val_temp)
 ```
 
-Comparing the `edx` and `validation` dataset, we can tell the `edx` has the size of 9,000,055 × 6, is just a longer version of `validation` with the size of 999,999 × 6. When we look into the details of 'edx' dataset, we have:
+Comparing the `edx` and `validation` dataset, we can tell the `edx` has the size of 9,000,055 × 6, is just a longer version of `validation` with the size of 999,999 × 6.
+```{r echo = FALSE}
+df_count <-data.frame(set = c("edx", "validation"),
+                      size = c(length(edx$rating),
+                               length(validation$rating)))
+
+knitr::kable(df_count)
+
+ggplot(df_count, aes(set, y = log(set_length))) + 
+  geom_bar(stat = "identity", aes(y = log(size)), width = 0.4)
+```
+
+When we look into the details of 'edx' dataset, we have:
 ```{r echo = FALSE}
 options(width = 70)
 
@@ -139,7 +153,10 @@ let's look at one example to have a more straight understanding.
 options(width = 70)
 
 #we convert the timestamp column over the entire 'edx' set first 
-edx[, timestamp := as.Date(as.POSIXct(timestamp, origin="1970-01-01"))][9,]
+sample <- edx[, timestamp := 
+                as.Date(as.POSIXct(timestamp, origin="1970-01-01"))][9,]
+
+knitr::kable(sample)
 ```
 
 We can tell this user by 'userId' = 1 rated the movie "Lion King" with 'movieId' = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised under Adventure|Animation|Children|Drama|Musical. 
@@ -152,9 +169,12 @@ range(edx$rating)
 We see the range is starting from 0.5, but implicitly the floor of the rating range is **0**. Why does this implicit **0** rating assumption may stand? Let us look at number of user/movie paired ratings we have in 'edx':
 ```{r echo = FALSE}
 df_sparse <- data.table(x = c("user_num", "movie_num", "rating_num"),
-          y = c(uniqueN(edx$userId), uniqueN(edx$movieId), uniqueN(edx$rating)))
-ggplot(df_sparse, aes(x, y = log(x_num))) + geom_bar(stat = "identity", aes(y = log(y)), width = 0.4)
-rm(df_sparse)
+          y = c(uniqueN(edx$userId), 
+                uniqueN(edx$movieId), 
+                uniqueN(edx$rating)))
+
+ggplot(df_sparse, aes(x, y = log(x_num))) + 
+  geom_bar(stat = "identity", aes(y = log(y)), width = 0.4)
 ```
 
 Theoretically, there should be: 
@@ -221,7 +241,7 @@ $$
 up to now, we have built enough understanding to proceed with our algorithm, but we still miss one important part, the number of latent factors to construct each user vector and movie vector, we will leave it at the end within the last step of the computation. With the above foundation, we are ready to get into the computations now. 
 
 ###Centralisation
-Instead apply our latent factor algorithm, we need to centralise user-movie rating matrix first. Traditionally, we only centeralise the measurements vectors in SVD. In our rating matrix, there are tow kinds of measurements, users and movies. If we treat each user as a measurement, then each movie is a sample point, conversely, we treat each movie as a measurement, then each user is a sample point. 
+Instead applying our latent factor algorithm directly, we need to centralise user-movie rating matrix first. Traditionally, we only centeralise the measurements vectors in SVD. In our rating matrix, there are tow kinds of measurements, users and movies. If we treat each user as a measurement, then each movie is a sample point, conversely, we treat each movie as a measurement, then each user is a sample point. 
 $$
 R = \begin{bmatrix} \vec{User_1}^{T}\\
 \vec{User_2}^{T}\\
@@ -239,20 +259,167 @@ g_mean <- mean(edx$rating)
 ```
 The global mean we just got is the centre of all the available ratings, so it is neither the mean of any user nor mean of any movie. But we can assume this global mean is the centre of all the means of every user, as well as cenre of all the means of each movie, so we can estimate each user's real mean by $User_u\_mean = g\_mean + u\_bias$. 
 
-How can we find the best u_bias for each user? We aim for minimise the $RMSE$:
+How can we find the best u_bias for each user? We aim to minimise the $RMSE$:
 $$RMSE = \sqrt{\frac{\sum_{ui \in N}(\hat{r_{ui}} - r_{ui})^2}{N}}$$ 
 For the sake of simplicity, we will only work on the inner part (squared error), and construct our loss function:
 $$
 Loss = \frac{1}{2N} \sum_{ui \in N}(\hat{r_{ui}} - r_{ui})^2
 $$
-we are aiming for getting the best u_bias so that RMSE can be minimised with the set up of $\hat{r_{ui}} = g\_mean + u\_bias$. 
+we are aiming for the best u_bias so that RMSE can be minimised with the set up of $\hat{r_{ui}} = g\_mean + u\_bias$. 
 
-And what's more, there are active users who rates every movie she watched, and lazy users who rarely rate, so we introduce the regularisation factor ${\lambda}$ to avoid the over fitting risk, so the new regularised loss function becomes to be:
+And what's more, there are active users who rates every movie she watched, and lazy users who rarely rate, so we introduce the regularisation factor ${\lambda}$ to avoid the overfitting risk, so the new regularised loss function becomes to be:
 $$
 Loss = \frac{1}{2} \sum_{i \in N}(\hat{r_{ui}} - r_{ui})^2 + \frac{\lambda}{2N} \sum_{i \in N}b_u^2
 $$
-We dropped the u from ui in the $\Sigma$ sign, because we are estimating each user's bias individually based on the all the movies rated by her. We also dropped the N from the first part of $\frac{1}{2N}$ to make our computation formula of $b_u$ to be consistent with the Professor Irizarry's text book [@irizarry_2022], some one may prefer to keep it, that is just personal choice, it will only alter the $\lambda$ result, but the final $b_u$ should not vary much.
+We dropped the $u$ from $ui$ in the $\Sigma$ sign, because we are estimating each user's bias individually based on all the movies rated by her. We also dropped the $N$ from the first part of $\frac{1}{2N}$ to make our computation formula of $b_u$ to be consistent with the Professor Irizarry's text book [@irizarry_2022], some one may prefer to keep it, that is just personal choice, it will only alter the $\lambda$ result, the final $b_u$ should not vary much.
 
+The derived formula to perform the following $b_u$ calculation is:
+$$
+b_u = \frac{\sum_{i \in N}{(r_i - \bar{r})}}{\lambda + N}
+$$
+
+We also employ a 5-fold cross validation method to overcome potential overfitting.
+```{r eval = FALSE}
+
+#making 5-folds cross validation sets
+
+set.seed(2, sample.kind= "Rounding")
+
+ind_cv <- createFolds(edx$userId, k = 5)
+
+#utilize the multicores on our computer to parallel the loop
+#I am using total cores -1 to avoid system frozen
+#number of cores only need to be registered only once globally
+
+registerDoParallel(cores = 3)
+
+train_cv <- foreach(k = 1:5) %dopar% {edx[-ind_cv[[k]],]}
+
+test_cv <- foreach(k = 1:5, .packages = "tidyverse") %dopar% {
+    edx[ind_cv[[k]],] %>% 
+    semi_join(train_cv[[k]], by = "movieId") %>% 
+    semi_join(train_cv[[k]], by = "userId")}
+
+#We did not put back the dropped out data back to train_cv, 
+#because they are eventually showing up in other folds. 
+#This is just personal choice, we can put them back, 
+#but it won't cause major change in result.
+
+rm(ind_cv)
+```
+
+We use the generated folds in above to search the best $\lambda$:
+```{r eval = FALSE}
+
+lambda_search <- seq(4, 8, 0.1)
+
+#try all the possible lambdas, and result in a RMSE table
+
+ub_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
+  foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
+    u_bias <- train_cv[[k]][
+      , .(u_bias = sum(rating - g_mean) / (l + .N)), by = .(userId)]
+    
+    pred <- u_bias[test_cv[[k]], on = .(userId)][
+      , .(err = g_mean + u_bias - rating)]
+    
+    sqrt(mean(pred$err * pred$err))
+  }
+```
+
+```{r}
+setDT(ub_tune)
+setnames(ub_tune, as.character(lambda_search))
+
+#take the mean value over each column 
+#to get the final cross validation result for each lambda
+ub_rmse <- ub_tune[, lapply(.SD, mean)]
+
+ub_rmse
+```
+
+```{r echo = FALSE}
+qplot(lambda_search, as.numeric(ub_rmse[1, ]), geom = c("point", "line"), 
+      main = "Lambda search visualisation of u_bias")
+```
+
+```{r eval = FALSE}
+#take the lambda with the best cross validation RMSE
+#apply it to the u_bias formula
+lambda_u <- lambda_search[which.min(ub_rmse[1,])]
+
+u_bias <- edx[, .(u_bias = sum(rating - g_mean) / (lambda_u + .N)), 
+                       by = .(userId)]
+
+rm(ub_rmse, ub_tune, lambda_search, lambda_u)
+```
+
+We can use the same method to find the bias of each movie, so that our mean is adjusted not only toward each user real mean, but also toward each movie real mean. So the $\hat{r_{ui}} = g\_mean + u\_bias + m\_bias$, and the $b_m$ is:
+$$
+b_m = \frac{\sum_{u \in N}{(r_u - \bar{r} - b_u)}}{\lambda + N}
+$$
+From the above formula we can tell, the movie's real mean varies on each user. It is not like user's mean is relying on each user's own perspective, movie's real mean is a combination of all watchers with different perspectives, so the above formula takes the rater's perspective into account of the calculation. 
+
+```{r eval = FALSE}
+
+lambda_search <- seq(1, 5, 0.1)
+
+#again try all the possible lambdas, and result in a RMSE table
+
+mb_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
+  foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
+    m_bias <- u_bias[train_cv[[k]], on = .(userId)][
+      , .(m_bias = sum(rating - g_mean - u_bias) / (l + .N)), 
+      by = .(movieId)]
+    
+    pred <- m_bias[u_bias[test_cv[[k]], 
+                          on = .(userId)], 
+                   on = .(movieId)][
+                     , .(err = g_mean + u_bias + m_bias - rating)]
+    
+    sqrt(mean(pred$err * pred$err))
+  }
+```
+
+```{r}
+
+setDT(mb_tune)
+setnames(mb_tune, as.character(lambda_search))
+
+#take the mean value over each column 
+#to get the final cross validation result for each lambda
+mb_rmse <- mb_tune[, lapply(.SD, mean)]
+
+mb_rmse
+```
+
+```{r echo = FALSE}
+qplot(lambda_search, as.numeric(mb_rmse[1,]), geom = c("point", "line"), 
+      main = "Lambda search visualisation of m_bias")
+```
+
+```{r eval = FALSE}
+#take the lambda with the best cross validation RMSE
+#apply it to the u_bias formula
+lambda_m <- lambda_search[which.min(mb_rmse[1,])]
+
+m_bias <- edx[u_bias, on = .(userId)][
+  , .(m_bias = sum(rating - g_mean - u_bias) / (lambda_m + .N)), 
+  by = .(movieId)]
+
+rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
+```
+
+By now, we have finished the centralisation process under 
+$\bar{r_{ui}} = \bar{r_{g}} + b_u + b_m$. We have to stress that this $\bar{r_{ui}}$ varies on different user-movie combinations, so it can be generalised across all the elements of our Rating matrix, regardless the $r_{ui}$ is known to us or not. This generalisation property makes it to be versatile in the predictions. 
+
+###User Genres
+```{r, echo = FALSE}
+options(width = 70)
+
+knitr::kable(edx[9,])
+```
+We use the beginning example to remind ourselves that, the 'genres' information of each movie are given, so heuristically we can make the assumption that each user also has some preference toward some particular genres. 
 
 ## Final result
 
