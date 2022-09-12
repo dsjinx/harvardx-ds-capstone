@@ -190,7 +190,7 @@ That 'userId' and 'movieId' matching process makes the rating matrix of 'validat
 After we identified our problem mathematically, one of the most popular algorithm to solve this problem is \textcolor{blue}{Latent Factor method} by @Koren2009. so we will imitate this $1 million algorithm, but in a rather simple way with an extra step of searching user's genres info, which is not included in the dataset. 
 
 ## Methods details
-Before we get into the details of our algorithm, we will build some heuristic understanding on it first. 
+Before we get into the details of our algorithm, we will build some basic understanding on it first. 
 
 ###Foundations
 The central idea of our algorithm, as well as the one by @Koren2009, is matrix factorisation. More specifically, it is the idea of PCA or SVD in linear algebra, but on the opposite way. As described by @Bell2007, PCA is the idea of rank minimisation for a dense matrix with no missing entry, but our user-movie rating matrix is highly sparse with most entries are missing, so we are going the opposite way of rank reduction, we are estimating the rank up from zero. To justify our approach, let's break it into two parts: 1, rating matrix factorisation; 2, factor searching. 
@@ -227,7 +227,7 @@ $$\begin{equation*}
 P_{t+1} = P_t - \underbrace{Q_t\cdot(P_t^{T}Q_t - R)^{T}}_{\nabla P_t}\\
 Q_{t+1} = Q_t - \underbrace{P_t\cdot(P_tQ_t - R)}_{\nabla Q_t}
 \end{equation*}$$
-The above alternations are not efficient with our sparse matrix scenario though, we just use them as a demonstration, and we will tweak them to fit our purpose later, when we get into the details of our calculation. For more details on gradient descent and why it works, this book @Strang2019 covers all the essentials. Only to have a heuristic understanding about gradient descent, geometrically we are having a convex loss function, because ${\frac{1}{2}\|P^{T}\cdot Q - R\|_F^2}$ $\geq$ 0 is positive semidefinite, ideally a rather simple case is loss this function > 0 a positive definite matrix, then it is a bowl opening up, the bottom point of the bowl is the minimum of the loss function we are working hardly to achieve. On the other hand, by achieving this bottom point, we also minimise our target RMSE function:
+The above alternations are not efficient with our sparse matrix scenario though, we just use them as a demonstration, and we will tweak them to fit our purpose later, when we get into the details of our calculation. For more details on gradient descent and why it works, this book @Strang2019 covers all the essentials. Only to have a intuitive understanding about gradient descent, geometrically we are having a convex loss function, because ${\frac{1}{2}\|P^{T}\cdot Q - R\|_F^2}$ $\geq$ 0 is positive semidefinite, ideally a rather simple case is loss this function > 0 a positive definite matrix, then it is a bowl opening up, the bottom point of the bowl is the minimum of the loss function we are working hardly to achieve. On the other hand, by achieving this bottom point, we also minimise our target RMSE function:
 $$
 RMSE_{matrix} = \|P^{T}Q - R\|_F
 $$
@@ -506,7 +506,9 @@ Let's look at the loss function structure of "Elastic_Net" first [@Friedman2009]
 $$
 Loss_{en} = \frac{1}{2N}\sum_{m \in N}\|y_{ui} - \beta_{u0} - \vec{x}_m^{T}\vec{\beta}_u\|_F^2 + \lambda\Big[(1 - \alpha)\frac{\|\beta\|_F^2}{2} + \alpha \sum_{j \in 19}\|\beta_j\|_2\Big]
 $$
-This loss function may look a bit scary at first glance, but indeed it is just a normal quadratic loss $\frac{1}{2N}\sum_{m \in N}\|y_{ui} - \beta_{u0} - \vec{x}_m^{T}\vec{\beta}_u\|_F^2$ with a lasso-ridge hybrid regularisation. In the previous $b_u$ and $b_m$ part, we have had lots of experiences with the ridge regression regularisation already, which is evolved into $\frac{\lambda(1 - \alpha)}{2}\|\beta\|_F^2$ over here, then the last part is a lasso $\lambda\cdot\alpha \sum_{j \in 19}\|\beta_j\|_2$. So geometrically, this lasso-ridge hybrid regularisation form is a shape between a ridge circle and a lasso diamond, it is more like a diamond lasso with a slight rounded stick out vertex. Have a geometric understanding can help us 
+This loss function may look a bit scary at first glance, but indeed it is just a normal quadratic loss $\frac{1}{2N}\sum_{m \in N}\|y_{ui} - \beta_{u0} - \vec{x}_m^{T}\vec{\beta}_u\|_F^2$ with a lasso-ridge hybrid regularisation. In the previous $b_u$ and $b_m$ part, we have had lots of experiences with the ridge regression regularisation already, which is evolved into $\frac{\lambda(1 - \alpha)}{2}\|\beta\|_F^2$ over here, then the last part is a lasso $\lambda\cdot\alpha \sum_{j \in 19}\|\beta_j\|_2$. So geometrically, this lasso-ridge hybrid regularisation form is a shape between a ridge circle and a lasso diamond, it is more like a diamond lasso with a slight rounded stick out vertex. Have a geometric understanding can help us better grasp the reason for us choosing it fitting. The more detailed explanations can be found in the oringinal paper by @Zou2005. 
+
+From the understanding of its regularisation structure, 
 
 The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a 'userId' $\times$ 'movieId' big table. 
 ```{r eval = FALSE}
