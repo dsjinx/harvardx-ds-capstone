@@ -109,16 +109,12 @@ load("~/Work/Rproj/PH125.9x/harvardx-ds-capstone/misc/val.Rdata")
 
 Here is the macro view of `edx` dateset:
 ```{r echo = FALSE}
-options(width = 70)
-
 edx_temp <- head(edx)
 knitr::kable(edx_temp)
 ```
 
 Here is the macro view of `validation` dataset:
 ```{r echo = FALSE}
-options(width = 70)
-
 val_temp <- head(validation)
 knitr::kable(val_temp)
 ```
@@ -137,8 +133,6 @@ ggplot(df_count, aes(set, y = log(set_length))) +
 
 When we look into the details of 'edx' dataset, we have:
 ```{r echo = FALSE}
-options(width = 70)
-
 names(edx)
 ```
 
@@ -150,7 +144,6 @@ For movie info, we have 'movieId', 'title', and 'genres'. One thing need to pay 
 
 let's look at one example to have a more straight understanding. 
 ```{r}
-options(width = 70)
 
 #we convert the timestamp column over the entire 'edx' set first 
 sample <- edx[, timestamp := 
@@ -223,7 +216,7 @@ Then R is a user_num(rows) by movie_num(cols) rating matrix, P is a user_num(row
 $$
 r_{ui} = \vec{p_u}^{T}\cdot1\cdot\vec{q_i}
 $$
-The 1 in between $\vec{p_u}^{T}$ and $\vec{q_i}$ can be neglected. we also need to clarify that the $\vec{p_u}^{T}$ is the u-th row of P matrix in above, and same for $\vec{q_i}$ is the i-th column of Q matrix. We are putting the transpose sign on $\vec{p}$ by removing it from $\vec{q}$, is making the equation of $r_{ui}$ to be more linear algebra naturally to the readers. And the length of each $\vec{p_u}$ and $\vec{q_i}$ are the same to be _f_. So with the above understanding, we can remake the R matrix to be more convenient to serve our purpose:
+The 1 in between $\vec{p_u}^{T}$ and $\vec{q_i}$ can be neglected. we also need to clarify that the $\vec{p_u}^{T}$ is the u-th row of P matrix in above, and same for $\vec{q_i}$ is the i-th column of Q matrix. We are putting the transpose sign on $\vec{p}$ by removing it from $\vec{q}$, is making the equation of $r_{ui}$ to be more linear algebraic naturally to the readers. And the length of each $\vec{p_u}$ and $\vec{q_i}$ are the same to be _f_. So with the above understanding, we can remake the R matrix to be more convenient to serve our purpose:
 $$
 R_{lfm} = P^{T}\cdot Q
 $$
@@ -260,16 +253,16 @@ g_mean <- mean(edx$rating)
 The global mean we just got is the centre of all the available ratings, so it is neither the mean of any user nor mean of any movie. But we can assume this global mean is the centre of all the means of every user, as well as cenre of all the means of each movie, so we can estimate each user's real mean by $User_u\_mean = g\_mean + u\_bias$. 
 
 How can we find the best u_bias for each user? We aim to minimise the $RMSE$:
-$$RMSE = \sqrt{\frac{\sum_{ui \in N}(\hat{r_{ui}} - r_{ui})^2}{N}}$$ 
+$$RMSE = \sqrt{\frac{\sum_{ui \in N}(\hat{r}_{ui} - r_{ui})^2}{N}}$$ 
 For the sake of simplicity, we will only work on the inner part (squared error), and construct our loss function:
 $$
-Loss = \frac{1}{2N} \sum_{ui \in N}(\hat{r_{ui}} - r_{ui})^2
+Loss = \frac{1}{2N} \sum_{ui \in N}(\hat{r}_{ui} - r_{ui})^2
 $$
 we are aiming for the best u_bias so that RMSE can be minimised with the set up of $\hat{r_{ui}} = g\_mean + u\_bias$. 
 
 And what's more, there are active users who rates every movie she watched, and lazy users who rarely rate, so we introduce the regularisation factor ${\lambda}$ to avoid the overfitting risk, so the new regularised loss function becomes to be:
 $$
-Loss = \frac{1}{2} \sum_{i \in N}(\hat{r_{ui}} - r_{ui})^2 + \frac{\lambda}{2N} \sum_{i \in N}b_u^2
+Loss = \frac{1}{2} \sum_{i \in N}(\hat{r}_{ui} - r_{ui})^2 + \frac{\lambda}{2N} \sum_{i \in N}b_u^2
 $$
 We dropped the $u$ from $ui$ in the $\Sigma$ sign, because we are estimating each user's bias individually based on all the movies rated by her. We also dropped the $N$ from the first part of $\frac{1}{2N}$ to make our computation formula of $b_u$ to be consistent with the Professor Irizarry's text book [@irizarry_2022], some one may prefer to keep it, that is just personal choice, it will only alter the $\lambda$ result, the final $b_u$ should not vary much.
 
@@ -354,7 +347,7 @@ u_bias <- edx[, .(u_bias = sum(rating - g_mean) / (lambda_u + .N)),
 rm(ub_rmse, ub_tune, lambda_search, lambda_u)
 ```
 
-We can use the same method to find the bias of each movie, so that our mean is adjusted not only toward each user real mean, but also toward each movie real mean. So the $\hat{r_{ui}} = g\_mean + u\_bias + m\_bias$, and the $b_m$ is:
+We can use the same method to find the bias of each movie, so that our mean is adjusted not only toward each user real mean, but also toward each movie real mean. So the $\hat{r}_{ui} = g\_mean + u\_bias + m\_bias$, and the $b_m$ is:
 $$
 b_m = \frac{\sum_{u \in N}{(r_u - \bar{r} - b_u)}}{\lambda + N}
 $$
@@ -411,7 +404,7 @@ rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
 ```
 
 By now, we have finished the centralisation process under 
-$\bar{r_{ui}} = \bar{r_{g}} + b_u + b_m$. We have to stress that this $\bar{r_{ui}}$ varies on different user-movie combinations, so it can be generalised across all the elements of our Rating matrix, regardless the $r_{ui}$ is known to us or not. This generalisation property makes it to be versatile in the predictions. 
+$\bar{r}_{ui} = \bar{r}_{g} + b_u + b_m$. We have to stress that this $\bar{r_{ui}}$ varies on different user-movie combinations, so it can be generalised across all the elements of our Rating matrix, regardless the $r_{ui}$ is known to us or not. This generalisation property makes it to be versatile in the predictions. 
 
 ###Genres bias
 ```{r, echo = FALSE}
@@ -420,26 +413,134 @@ options(width = 70)
 knitr::kable(edx[9,])
 ```
 We use the beginning example to remind ourselves that, the 'genres' information of each movie are given, simultaneously we can an assumption that each user also has some preferences toward some particular genres, we call it user genre bias $g_u$. Instead of being a single numeric value, we assume that $\vec{g_u}$ is a vector, why? That vector assumption is inspired from the movie genres. In above "The Lion King" example, we see the genres are categorised as: 
-```{r}
+```{r echo = FALSE}
 edx[9,]$genres
 ```
 One movie has multiple genres, but we can not quantify which genre is dominant. This multi-genres attribute is also applicable to users, like the same example we just used, we can not tell the user $1$ rated "The Lion King" $5$ star is because she likes the the adventure genre, the animation genre, or the musical genre of the movie, we don't know what her dominant genre taste is. And it is also possible like the movie, she likes all the 5 genres in the movie, but out of those 5 she might have stronger preference on musical genre over the rest. 
 
 Now we have enough reason to not only take the user genre $\vec{g_u}$ as a vector, but also treat the movie genre as a vector $\vec{g_m}$ too. So to combine them together, we assume there is a genre bias $b_g = \vec{g_m} \cdot \vec{g_u}$. Next let's find the $\vec{g_m}$ for each movie, then use those movie $\vec{g_m}$ to find $\vec{g_u}$ for each user, after all we can use them to construct the $b_g$ in regard to different 'userId'-'movieId' pairs in our prediction. 
 
-Since we are given the genres of movie already, so we will start with constructing each movie's genre vector $\vec{g_m}$ first. Let's begin with some data cleaning on the grenes column to remove the "|". 
+Since we are given the genres of movie already, so we will start with constructing each movie's genre vector $\vec{g_m}$ first. Let's begin with some data cleaning on the genres column to remove the "|". 
 ```{r eval = FALSE}
 
+#every genres[[k]] contains all the genres names of one movie
 genres <- str_split(edx$genres, "\\|")
 
+#a char vector has all the genres names without duplicate
 gen_cat <- genres %>% unlist() %>% unique()
+```
+
+We then can have a visualisation on genres count, the top Hollywood capital favored genres are drama comedy and action. We will get a residual mean for each genre in next. The residual mean is based on the residual of subtracting the $\bar{r_{g}}$(global mean), $b_u$, and $b_m$ from the ratings.
+```{r echo = FALSE}
+gen_temp <- unlist(genres)
+gen_temp <- as.data.frame(gen_temp)
+ggplot(gen_temp, aes(x = gen_temp)) +
+  geom_histogram(stat = "count") + labs(title = "Genre Count") +
+  theme(axis.text.x = element_text(angle=90, vjust=.5, hjust=1))
+rm(gen_temp)
+```
+
+For gen x, it's residual mean is calculated as:$\bar{X}_{gen} = \frac{1}{N} \sum_{x \in N}(\bar{r_{g}} + b_u + b_m - r_x)$.
+```{r eval = FALSE}
 
 n <- length(gen_cat) 
 
-#only one movie(#8606) has no gen info,
-#otherwise we have to exclude those from following process
+gen_mean <- foreach(g = 1:n, .combine = "c",
+                    .packages = "data.table") %dopar% {
+                      u_bias[m_bias[edx, on = .(movieId)],
+                             on = .(userId)][genres %like% gen_cat[g],
+                              mean(g_mean + u_bias + m_bias - rating)]}
 ```
 
+```{r eval = FALSE}
+
+m_id <- unique(edx$movieId)
+m_n <- length(m_id)
+
+#a list contains genres char vector for each movieId without duplicated movie
+m_gen <- foreach(i = 1:m_n, .packages = c("stringr", "data.table")) %dopar% {
+  gens <- edx[movieId == m_id[i], genres][1]
+  str_split(gens, "\\|") %>% unlist()
+}
+
+names(m_gen) <- m_id
+```
+
+The next code chunk may be a bit confusing at beginning, what it does is to create a data frame that contains all the movie's genres means. We can see from the ""The Lion King" example, the movie column has it's categorised genres rows filled with that genre's mean we just calculated in above, and the rest genres rows are zero. 
+```{r echo = FALSE}
+knitr::kable(edx[9, .(movieId, title, genres)])
+```
+```{r echo = FALSE}
+gen[, c("gen_cat","364")][1:10,]
+```
+
+```{r eval = FALSE}
+
+ind <- foreach(g = 1:m_n, .packages = "foreach") %dopar% {
+  foreach(i = 1:length(m_gen[[g]]), .combine = "c",
+          .packages = "stringr") %do% {
+            str_which(gen_cat, m_gen[[g]][i])}}
+
+gen <- data.frame(gen_cat)
+
+#the m_n can be found in last chunk.
+j <- 1
+while(j <= m_n){
+  gen[, j+1] <- gen_mean
+  gen[-ind[[j]], j+1] <- 0
+  j <- j + 1
+}
+
+colnames(gen)[-1] <- m_id
+
+rm(j, genres, ind, m_gen, gen_cat, gen_mean, m_n)
+```
+
+As we stated at the beginning of this secession, we are looking for $\vec{g_m}$ and $\vec{g_u}$, so now we have got the $\vec{g_m}$ for each movie in the columns in above table. Now we start to look for the $\vec{g_u}$ for each user. 
+
+We made an assumption in above that, each genre bias $b_g = \vec{g_m} \cdot \vec{g_u}$, so linear algebraically we can treat the elements of $\vec{g_u}$ are the coefficients of the elements of $\vec{g_m}$, then each user-movie pair $b_g = \sum_{i = 1}^{19}g_{ui} \times g_{mi}$. To learn the $g_{ui}$, we have got the $g_{mi}$ already, the $b_g$ is in the residual of $\bar{r_{g}} + b_u + b_m - r_x$, under the assumption of $r_{ui} \sim \bar{r_{g}} + b_u + b_m + b_g$. 
+
+We will use "Elastic-Net" method to fit the $b_g = \vec{g_m} \cdot \vec{g_u}$ to get the wanted $\vec{g_u}$. We need to have some intuitive understanding with "Elastic-Net" first, before we proceed further. 
+
+Let's look at the loss function structure of "Elastic_Net" first [@Friedman2009]:
+$$
+Loss_{en} = \frac{1}{2N}\sum_{m \in N}\|y_{ui} - \beta_{u0} - \vec{x}_m^{T}\vec{\beta}_u\|_F^2 + \lambda\Big[(1 - \alpha)\frac{\|\beta\|_F^2}{2} + \alpha \sum_{j \in 19}\|\beta_j\|_2\Big]
+$$
+This loss function may look a bit scary at first glance, but indeed it is just a normal quadratic loss $\frac{1}{2N}\sum_{m \in N}\|y_{ui} - \beta_{u0} - \vec{x}_m^{T}\vec{\beta}_u\|_F^2$ with a lasso-ridge hybrid regularisation. In the previous $b_u$ and $b_m$ part, we have had lots of experiences with the ridge regression regularisation already, which is evolved into $\frac{\lambda(1 - \alpha)}{2}\|\beta\|_F^2$ over here, then the last part is a lasso $\lambda\cdot\alpha \sum_{j \in 19}\|\beta_j\|_2$. So geometrically, this lasso-ridge hybrid regularisation form is a shape between a ridge circle and a lasso diamond, it is more like a diamond lasso with a slight rounded stick out vertex. Have a geometric understanding can help us 
+
+The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a 'userId' $\times$ 'movieId' big table. 
+```{r eval = FALSE}
+
+residual_train <- u_bias[m_bias[edx, on = .(movieId)]
+                         , on = .(userId)][
+                           , .(resid = g_mean + u_bias + m_bias - rating),
+                           by = .(userId, movieId)]
+
+rtable <- dcast(residual_train, userId ~ movieId, value.var = "resid")
+
+movieId <- names(rtable[,-1])
+
+rtable_tr <- transpose(rtable, keep.names = "movieId",
+                       make.names = "userId")
+
+rtable_tr$movieId <- as.numeric(rtable_tr$movieId)
+
+m_id_dt <- data.table(movieId = m_id)
+
+rtable <- rtable_tr[m_id_dt, on = .(movieId)]
+
+rm(rtable_tr, movieId, m_id_dt)
+```
+
+```{r}
+
+rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
+rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
+gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
+gen_x <- t(gen_x)
+set.seed(3, sample.kind = "Rounding")
+ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
+```
 ## Final result
 
 ## Conclusion
