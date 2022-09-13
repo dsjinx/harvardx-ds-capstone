@@ -206,7 +206,7 @@ $$\Sigma = \begin{bmatrix}\sigma_1 & 0 & 0 & 0\\
 0 & 0 & 0 & 0\\
 0 & 0 & 0 & 0\\
 \end{bmatrix}$$
-This number f is critical to us, since it defines how many critical factors is contained in A. We also mentioned before the PCA, the slim version SVD, can help us reduce rank of A without loosing critical information according to the Eckart-Young theorem [@Strang2019]. So we can use this f, or k $\leq$ f more specifically, to shrink the U and V into m by k, and n by k matrix respectively, and this will still enable us to recover a good estimation of A with a smaller U, V through the matrix multiplication. Here we only abstract the key information of SVD and PCA to help us build the foundation of our algorithm, for further details on the topic, this book @Strang2016 will give a comprehensive explanation. 
+This number f is critical to us, since it defines how many critical factors is contained in A. We also mentioned before the PCA, the slim version SVD, can help us reduce rank of A without loosing critical information according to the Eckart-Young theorem [@Strang2019]. So we can use this f, or k$\leq$f more specifically, to shrink the U and V into m by k, and n by k matrix respectively, and this will still enable us to recover a good estimation of A with a smaller U, V through the matrix multiplication. Here we only abstract the key information of SVD and PCA to help us build the foundation of our algorithm, for further details on the topic, this book @Strang2016 will give a comprehensive explanation. 
 
 Now let's apply the standard SVD formula into our scenario, and rewrite it as:
 $$
@@ -216,18 +216,18 @@ Then R is a user_num(rows) by movie_num(cols) rating matrix, P is a user_num(row
 $$
 r_{ui} = \vec{p_u}^{T}\cdot1\cdot\vec{q_i}
 $$
-The 1 in between $\vec{p_u}^{T}$ and $\vec{q_i}$ can be neglected. we also need to clarify that the $\vec{p_u}^{T}$ is the u-th row of P matrix in above, and same for $\vec{q_i}$ is the i-th column of Q matrix. We are putting the transpose sign on $\vec{p}$ by removing it from $\vec{q}$, is making the equation of $r_{ui}$ to be more linear algebraic naturally to the readers. And the length of each $\vec{p_u}$ and $\vec{q_i}$ are the same to be _f_. So with the above understanding, we can remake the R matrix to be more convenient to serve our purpose:
+The 1 between $\vec{p_u}^{T}$ and $\vec{q_i}$ can be neglected. we also need to clarify that the $\vec{p_u}^{T}$ is the u-th row of P matrix in above, and same for $\vec{q_i}$ is the i-th column of Q matrix. We are putting the transpose sign on $\vec{p}$ by removing it from $\vec{q}$, is making the equation of $r_{ui}$ to be more linear algebraic naturally to the readers. And the length of each $\vec{p_u}$ and $\vec{q_i}$ are the same to be _f_. So with the above understanding, we can remake the R matrix to be more convenient to serve our purpose:
 $$
-R_{lfm} = P^{T}\cdot Q
+R_{lfm} = P^{T} Q
 $$
 Where P is a factor_num by user_num matrix, and Q is a factor_num by movie_num matrix, so $R_{lfm}$ is a user_num by movie_num matrix, and for notation convenient, we will use R to indicate $R_{lfm}$ in reset of the report.
 
-By inspecting the R matrix equation, to be successfully making the estimation on any R element $r_{ui}$, we need the corresponding $\vec{p_u}$ and $\vec{q_i}$. So how can we get this latent factor vector for each user and movie? @Bell2007 solved it by the idea of minimising the loss function ${\frac{1}{2}\|P^{T}\cdot Q - R\|_F^2}$ with the alternating gradient descent, and the alternating iterations here beautifully solved the problem of both P and Q are unknown to us at beginning, the iteration will be like this:
+By inspecting the R matrix equation, to be successfully making the estimation on any R element $r_{ui}$, we need the corresponding $\vec{p_u}$ and $\vec{q_i}$. So how can we get this latent factor vector for each user and movie? @Bell2007 solved it by the idea of minimising the loss function ${\frac{1}{2}\|P^{T} Q - R\|_F^2}$ with the alternating gradient descent, and the alternating iterations here beautifully solved the problem of both P and Q are unknown to us at beginning, the iteration will be like this:
 $$\begin{equation*}
 P_{t+1} = P_t - \underbrace{Q_t\cdot(P_t^{T}Q_t - R)^{T}}_{\nabla P_t}\\
-Q_{t+1} = Q_t - \underbrace{P_t\cdot(P_tQ_t - R)}_{\nabla Q_t}
+Q_{t+1} = Q_t - \underbrace{P_t\cdot(P_t^{T}Q_t - R)}_{\nabla Q_t}
 \end{equation*}$$
-The above alternations are not efficient with our sparse matrix scenario though, we just use them as a demonstration, and we will tweak them to fit our purpose later, when we get into the details of our calculation. For more details on gradient descent and why it works, this book @Strang2019 covers all the essentials. Only to have a intuitive understanding about gradient descent, geometrically we are having a convex loss function, because ${\frac{1}{2}\|P^{T}\cdot Q - R\|_F^2}$ $\geq$ 0 is positive semidefinite, ideally a rather simple case is loss this function > 0 a positive definite matrix, then it is a bowl opening up, the bottom point of the bowl is the minimum of the loss function we are working hardly to achieve. On the other hand, by achieving this bottom point, we also minimise our target RMSE function:
+The above alternations are not efficient with our sparse matrix scenario though, we just use them as a demonstration, and we will tweak them to fit our purpose later, when we get into the details of our calculation. For more details on gradient descent and why it works, this book @Strang2019 covers all the essentials. Only to have a intuitive understanding about gradient descent, geometrically we are having a convex loss function, because ${\frac{1}{2}\|P^{T} Q - R\|_F^2}$ $\geq$ 0 is positive semidefinite, ideally a rather simple case is loss this function > 0 a positive definite matrix, then it is a bowl opening up, the bottom point of the bowl is the minimum of the loss function we are working hardly to achieve. On the other hand, by achieving this bottom point, we also minimise our target RMSE function:
 $$
 RMSE_{matrix} = \|P^{T}Q - R\|_F
 $$
@@ -518,7 +518,7 @@ To use the 'glmnet' we need to make some clarifications in the above formula in 
 5. $\alpha$ is a weighting factor to provide the flexibility for us to maneuver the penalty to lean toward a pure ridge regression ($\alpha$ = 0), or a pure lasso ($\alpha$ = 1). 
 6. The last thing we need to pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed 'userId', and the length of each $\|\vec\beta_j\|$ is 19, which is the total number of genres we have. 
 
-After we clarified the data structure, then we will proceed to the calculations in below. One thing to note that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows machine. 
+After we clarified the data structure, then we will proceed to the calculations in below. One thing to notice that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows machine. 
 
 The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a 'movieId'$\times$'userId' big table. 
 ```{r eval = FALSE}
@@ -596,9 +596,16 @@ u_beta$"1"
 ```
 
 ###Latent Factors
-Up to now, we have done data centralisation, and used the movie genres to derive the user genres, which can be used to construct $b_g = \vec{g}_m \cdot \vec{\beta}_u + \beta_{0u}$, so for each pair of 'userId' and 'movieId', we can make a rough prediction based on $\hat{r}_{ui} \sim \bar{r}_g + b_u + b_i + b_g$. This subseccession will get us the last element $lf_{ui}$ to complete our model. 
+Up to now, we have done data centralisation, and used the movie genres to derive the user genres, which can be used to construct $b_g = \vec{g}_m \cdot \vec{\beta}_u + \beta_{0u}$, so for each pair of 'userId' and 'movieId', we can make a rough prediction based on $\hat{r}_{ui} \sim \bar{r}_g + b_u + b_i + b_g$. This subsection will get us the last element $lf_{ui}$ to complete our model. 
 
-
+At the very beginning of this secession, we have had a mathematical justification for this model can help us to achieve the result we want. We now can construct a model to serve our purpose on the mathematical ground. 
+$$
+Loss = \frac{1}{2}(\vec{p}_u\cdot\vec{q}_i - rsid_{ui})^2 + \lambda(\|\vec{p}_u\|_2 + \|\vec{q}_i\|_2)
+$$
+$$
+rsid_{ui} = \bar{r}_g + b_u + b_i + b_g - r_{ui} 
+$$
+We will find the best $\vec{p}_u$ and $\vec{q}_i$ for each user and movie respectively, so that our loss function is minimised. To notice that, instead matrix we used vectors and single values in our loss function, this kind of set up will be more convenient for our sparse matrix case. 
 
 ## Final result
 
