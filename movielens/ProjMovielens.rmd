@@ -466,7 +466,7 @@ m_gen <- foreach(i = 1:m_n, .packages = c("stringr", "data.table")) %dopar% {
 names(m_gen) <- m_id
 ```
 
-The next code chunk may be a bit confusing at beginning, what it does is to create a data frame that contains all the movie's genres means. We can see from the ""The Lion King" example, the movie column has it's categorised genres rows filled with that genre's mean we just calculated in above, and the rest genres rows are zero. 
+The next code chunk may be a bit confusing at beginning, what it does is to create a data frame that contains all the movie's genres means. We can see from the ""The Lion King" example, the movie column has it's categorised genres rows filled with that genre's mean just calculated in above, and the rest genres rows are zero. 
 ```{r echo = FALSE}
 knitr::kable(edx[9, .(movieId, title, genres)])
 ```
@@ -504,11 +504,21 @@ We will use "Elastic-Net" method to fit the $b_g = \vec{g_m} \cdot \vec{g_u}$ to
 
 Let's look at the loss function structure of "Elastic_Net" first [@Friedman2009]:
 $$
-Loss_{en} = \frac{1}{2N}\sum_{m \in N}\|y_{ui} - \beta_{u0} - \vec{x}_m^{T}\vec{\beta}_u\|_F^2 + \lambda\Big[(1 - \alpha)\frac{\|\beta\|_F^2}{2} + \alpha \sum_{j \in 19}\|\beta_j\|_2\Big]
+Loss_{en} = \frac{1}{2N}\sum_{m \in N}\|y_{ui} - \beta_{u0} - \vec{x}_m^{T}\vec{\beta}_u\|_F^2 + \lambda\Big[(1 - \alpha)\frac{\|\vec\beta_u\|_F^2}{2} + \alpha \sum_{j \in N}\|\vec\beta_j\|_2\Big]
 $$
 This loss function may look a bit scary at first glance, but indeed it is just a normal quadratic loss $\frac{1}{2N}\sum_{m \in N}\|y_{ui} - \beta_{u0} - \vec{x}_m^{T}\vec{\beta}_u\|_F^2$ with a lasso-ridge hybrid regularisation. In the previous $b_u$ and $b_m$ part, we have had lots of experiences with the ridge regression regularisation already, which is evolved into $\frac{\lambda(1 - \alpha)}{2}\|\beta\|_F^2$ over here, then the last part is a lasso $\lambda\cdot\alpha \sum_{j \in 19}\|\beta_j\|_2$. So geometrically, this lasso-ridge hybrid regularisation form is a shape between a ridge circle and a lasso diamond, it is more like a diamond lasso with a slight rounded stick out vertex. Have a geometric understanding can help us better grasp the reason for us choosing it fitting. The more detailed explanations can be found in the oringinal paper by @Zou2005. 
 
-From the understanding of its regularisation structure, 
+Because of this lasso-ridge hybrid structure, makes it to be specially useful in feature selection under a sparse situation [@Friedman2009]. That property is just a perfect fit in our scenario, we have a sparse rating matrix, we want to fit the data with the selected genres features to construct a $\vec{g_u}$ for each user. We can easily implement this method by the 'glmnet' package. 
+
+To use the 'glmnet' we need to make some clarifications in the above formula in our purpose:
+1. the $y_{ui}$ is the rating element in a 'movieId'$\times$'userId' rating matrix, which is just a transpose of R we used in above. 
+2. $\vec{x}_m^{T}$ is a row vector with its elements are all 19 genres we have in the dataset, but with only that movie categorised genres filled with the genre mean, and reset genres slots are all zero. 
+3. $\beta_0$ and $\vec\beta_u$ is a set of value to be returned by the fitting, they are in together to represent one single user's genres structure. We used the word structure to stress that, the $\vec{\beta}_u$ has the same length as $\vec{x}_m$, we also assume the user's genres preferences can be categorised in a mixture of these 19 genres we have. And the $\beta_0$ here is to be treated as a central point of all the genres to a user. 
+4. The $\lambda$ is acting as the traditional penalty coefficient to prevent overfitting. The nice thing about using 'glmnet' package is that, it tunes the $\lambda$ by cross validation, and apply it in fitting result. 
+5. $\alpha$ is a weighting factor to provide the flexibility for us to maneuver the penalty to lean toward a pure ridge regression ($\alpha$ = 0), or a pure lasso ($\alpha$ = 1). 
+6. The last thing we need pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed 'userId', and the length of each $\|\vec\beta_j\|$ is 19, which is the total number of genres we have. 
+
+After we clarified the data structure, then we will proceed to the calculations in below. One thing to note that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows 11 machine. 
 
 The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a 'userId' $\times$ 'movieId' big table. 
 ```{r eval = FALSE}
