@@ -16,7 +16,7 @@ a conclusion section that gives a brief summary of the report, its limitations a
 
 40 points: The report includes all required sections, is easy to follow with good supporting detail throughout, and is insightful and innovative.
 ## Executive summary
-We are going to create a movie recommendation system in this project. This system will predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{?0.80}. The algorithm is based on the Netflix winning latent factor method [@Koren2009], but a rather vanilla version with an extra step of searching user's genres. 
+We are going to create a movie recommendation system in this project. This system will predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{0.8081552}. The algorithm is based on the Netflix winning latent factor method [@Koren2009], but a rather vanilla version with an extra step of searching user's genres. 
 
 ## Introduction
 This project is inspired by the $1 million prize competition hosted by Netflix in 2006. The rule of winning is to achieve a 10% more improvement on RMSE, comparing to Netflix own in house algorithm. But in this project, we just use a fraction of Netflix competition dataset (our 10m version against the original size of 100m [@Töscher09]). Our goal in here is simply to achieve a \textcolor{blue}{RMSE < 0.86490} between our prediction and validation set ratings.
@@ -347,7 +347,7 @@ u_bias <- edx[, .(u_bias = sum(rating - g_mean) / (lambda_u + .N)),
 rm(ub_rmse, ub_tune, lambda_search, lambda_u)
 ```
 
-We can use the same method to find the bias of each movie, so that our mean is adjusted not only toward each user real mean, but also toward each movie real mean. So the $\hat{r}_{ui} = g\_mean + u\_bias + m\_bias$, and the $b_m$ is:
+We can use the same method to find the bias of each movie, so that our mean is adjusted not only toward each user real mean, but also toward each movie real mean. So the $\hat{r}_{ui} \sim g\_mean + u\_bias + m\_bias$, and the $b_m$ is:
 $$
 b_m = \frac{\sum_{u \in N}{(r_u - \bar{r} - b_u)}}{\lambda + N}
 $$
@@ -406,7 +406,7 @@ rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
 By now, we have finished the centralisation process under 
 $\bar{r}_{ui} = \bar{r}_{g} + b_u + b_m$. We have to stress that this $\bar{r_{ui}}$ varies on different user-movie combinations, so it can be generalised across all the elements of our Rating matrix, regardless the $r_{ui}$ is known to us or not. This generalisation property makes it to be versatile in the predictions. 
 
-###Genres bias
+###Genres Bias
 ```{r, echo = FALSE}
 options(width = 70)
 
@@ -516,11 +516,11 @@ To use the 'glmnet' we need to make some clarifications in the above formula in 
 3. $\beta_0$ and $\vec\beta_u$ is a set of value to be returned by the fitting, they are in together to represent one single user's genres structure. We used the word structure to stress that, the $\vec{\beta}_u$ has the same length as $\vec{x}_m$, we also assume the user's genres preferences can be categorised in a mixture of these 19 genres we have. And the $\beta_0$ here is to be treated as a central point of all the genres to a user. 
 4. The $\lambda$ is acting as the traditional penalty coefficient to prevent overfitting. The nice thing about using 'glmnet' package is that, it tunes the $\lambda$ by cross validation, and apply it in fitting result. 
 5. $\alpha$ is a weighting factor to provide the flexibility for us to maneuver the penalty to lean toward a pure ridge regression ($\alpha$ = 0), or a pure lasso ($\alpha$ = 1). 
-6. The last thing we need pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed 'userId', and the length of each $\|\vec\beta_j\|$ is 19, which is the total number of genres we have. 
+6. The last thing we need to pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed 'userId', and the length of each $\|\vec\beta_j\|$ is 19, which is the total number of genres we have. 
 
-After we clarified the data structure, then we will proceed to the calculations in below. One thing to note that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows 11 machine. 
+After we clarified the data structure, then we will proceed to the calculations in below. One thing to note that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows machine. 
 
-The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a 'userId' $\times$ 'movieId' big table. 
+The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a 'movieId'$\times$'userId' big table. 
 ```{r eval = FALSE}
 
 residual_train <- u_bias[m_bias[edx, on = .(movieId)]
@@ -544,15 +544,62 @@ rtable <- rtable_tr[m_id_dt, on = .(movieId)]
 rm(rtable_tr, movieId, m_id_dt)
 ```
 
-```{r}
+```{r eval = FALSE}
 
+#turn the previous made movie x user table into a sparse matrix
 rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
+
+#turn the movie genres table in above into a sparse matrix
+#we use the result movie x genres mean matrix as the predictor in model
 gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
 gen_x <- t(gen_x)
+
+#break the big rating matrix into user batches with size of 1000
 set.seed(3, sample.kind = "Rounding")
 ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
 ```
+
+```{r eval = FALSE}
+
+k <- length(ind_y)
+
+#an empty list container to be filled by the fitting results in next
+u_beta <- list()
+
+#\alpha = 0.5 to make the model to be a "Elastic Net"
+#the "mse" defines our loss function to be quadratic
+#record the best result \beta with the "lambda.min" 
+for(k in 1:k){
+  fit <- cv.glmnet(gen_x, rtable_y[, ind_y[[k]]],
+                   family = "mgaussian",
+                   type.measure = "mse",
+                   nfolds = 5, alpha = 0.5,
+                   parallel = TRUE, trace.it = TRUE)
+  u_beta[[k]] <- coef(fit, s= "lambda.min")
+  rm(fit)
+  gc()
+}
+
+rm(k, ind_y)
+
+u_beta <- unlist(u_beta)
+```
+
+```{r}
+
+#each u_beta$"userId" is a 20x1 vector for the userId = k
+#1st element named interception is \beta_0
+#the 2nd to 20th elements named as V1 - V19 is the vector \beta_u
+
+u_beta$"1"
+```
+
+###Latent Factors
+Up to now, we have done data centralisation, and used the movie genres to derive the user genres, which can be used to construct $b_g = \vec{g}_m \cdot \vec{\beta}_u + \beta_{0u}$, so for each pair of 'userId' and 'movieId', we can make a rough prediction based on $\hat{r}_{ui} \sim \bar{r}_g + b_u + b_i + b_g$. This subseccession will get us the last element $lf_{ui}$ to complete our model. 
+
+
+
 ## Final result
 
 ## Conclusion
