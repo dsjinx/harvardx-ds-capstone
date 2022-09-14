@@ -206,7 +206,7 @@ $$\Sigma = \begin{bmatrix}\sigma_1 & 0 & 0 & 0\\
 0 & 0 & 0 & 0\\
 0 & 0 & 0 & 0\\
 \end{bmatrix}$$
-This number f is critical to us, since it defines how many critical factors is contained in A. We also mentioned before the PCA, the slim version SVD, can help us reduce rank of A without loosing critical information according to the Eckart-Young theorem [@Strang2019]. So we can use this f, or k$\leq$f more specifically, to shrink the U and V into m by k, and n by k matrix respectively, and this will still enable us to recover a good estimation of A with a smaller U, V through the matrix multiplication. Here we only abstract the key information of SVD and PCA to help us build the foundation of our algorithm, for further details on the topic, this book @Strang2016 will give a comprehensive explanation. 
+This number f is critical to us, since it defines how many critical factors is contained in A. We also mentioned before the PCA, this slim version SVD, can help us reduce rank of A without compromising critical information according to the Eckart-Young theorem [@Strang2019]. So we can use this f, or k$\leq$f more specifically, to shrink the U and V into m by k, and n by k matrix respectively, and this will still enable us to recover a good estimation of A with a smaller U, V through the matrix multiplication. Here we only abstract the key information of SVD and PCA to help us build the foundation of our algorithm, for further details on the topic, this book @Strang2016 will give a comprehensive explanation. 
 
 Now let's apply the standard SVD formula into our scenario, and rewrite it as:
 $$
@@ -412,10 +412,12 @@ options(width = 70)
 
 knitr::kable(edx[9,])
 ```
+
 We use the beginning example to remind ourselves that, the 'genres' information of each movie are given, simultaneously we can an assumption that each user also has some preferences toward some particular genres, we call it user genre bias $g_u$. Instead of being a single numeric value, we assume that $\vec{g_u}$ is a vector, why? That vector assumption is inspired from the movie genres. In above "The Lion King" example, we see the genres are categorised as: 
 ```{r echo = FALSE}
 edx[9,]$genres
 ```
+
 One movie has multiple genres, but we can not quantify which genre is dominant. This multi-genres attribute is also applicable to users, like the same example we just used, we can not tell the user $1$ rated "The Lion King" $5$ star is because she likes the the adventure genre, the animation genre, or the musical genre of the movie, we don't know what her dominant genre taste is. And it is also possible like the movie, she likes all the 5 genres in the movie, but out of those 5 she might have stronger preference on musical genre over the rest. 
 
 Now we have enough reason to not only take the user genre $\vec{g_u}$ as a vector, but also treat the movie genre as a vector $\vec{g_m}$ too. So to combine them together, we assume there is a genre bias $b_g = \vec{g_m} \cdot \vec{g_u}$. Next let's find the $\vec{g_m}$ for each movie, then use those movie $\vec{g_m}$ to find $\vec{g_u}$ for each user, after all we can use them to construct the $b_g$ in regard to different 'userId'-'movieId' pairs in our prediction. 
@@ -518,7 +520,7 @@ To use the 'glmnet' we need to make some clarifications in the above formula in 
 5. $\alpha$ is a weighting factor to provide the flexibility for us to maneuver the penalty to lean toward a pure ridge regression ($\alpha$ = 0), or a pure lasso ($\alpha$ = 1). 
 6. The last thing we need to pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed 'userId', and the length of each $\|\vec\beta_j\|$ is 19, which is the total number of genres we have. 
 
-After we clarified the data structure, then we will proceed to the calculations in below. One thing to notice that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows machine. 
+After we clarified the data structure, then we will proceed to the calculations in below. One thing to note that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows machine. 
 
 The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a 'movieId'$\times$'userId' big table. 
 ```{r eval = FALSE}
@@ -605,9 +607,282 @@ $$
 $$
 rsid_{ui} = \bar{r}_g + b_u + b_i + b_g - r_{ui} 
 $$
-We will find the best $\vec{p}_u$ and $\vec{q}_i$ for each user and movie respectively, so that our loss function is minimised. To notice that, instead matrix we used vectors and single values in our loss function, this kind of set up will be more convenient for our sparse matrix case. 
+We will find the best $\vec{p}_u$ and $\vec{q}_i$ for each user and movie respectively, so that our loss function is minimised. To note that, instead matrix we use vectors and single values in our loss function, this kind of set up will be more convenient for our sparse case. So the the learning iterations are also in a vector form to fit our needs. 
+$$
+\vec{p}_{t+1} = \vec{p}_t - lr\cdot\nabla_pL\\
+\vec{q}_{t+1} = \vec{q}_t - lr\cdot\nabla_qL\\
+\nabla_pL = err\cdot\vec{q}_t + \lambda\cdot\vec{p}_t\\
+\nabla_qL = err\cdot\vec{p}_t + \lambda\cdot\vec{q}_t\\
+err = \vec{p}_t\cdot\vec{q}_t - rsid_{ui}
+$$
+This set of formulas describe the whole calculation process, but in a reverse order, this way of ordering can more clearly explain themselves. To be success in computation, we need to tune these hyperparameters first:
+1. **f**: is the factor length for each $\vec{p}_u$ and $\vec{q}_i$, which we mentioned in the beginning of the "Foundation" subsection without solving it. We will tune it first to construct $\vec{p}_u$ and $\vec{q}_i$, so we can proceed.
+2. **lr**: is the learning rate, in some textbook it is also called step size, which will be more intuitive, since it controls how big the stride we are taking for each step in searching. There is a trade off, if the size is too big, not only we will never reach the minimum point of the bowl, but also the result can explode by keep climbing to the infinite maximum. But if we take too small stride each step, then it may take forever to reach the minimum point. So academically, researchers and practitioners are constantly searching and developing new ways of constructing this step size, someone calls it the art in machine learning. But we will only use the most brutal way to tune it by cross validation. 
+3. $\lambda$: is playing as a penalty coefficient to prevent from overfitting in loss function as usual, but it also decide how low we can reach down the bowl. If the **lr** controls the speed of searching/learning in general, then $\lambda$ controls the precision of learning. 
+
+Now we are ready to proceed to the calculation details. the following code will help us to get the $residual_{ui}$ for each user-movie paired ratings in 'edx' dataset.
+```{r eval = FALSE}
+
+uid_train <- edx$userId %>% as.character()
+mid_train <- edx$movieId %>% as.character()
+
+#composite gen_bias for the user-movie pair in edx trainning set
+ml <- length(edx$movieId)
+gen_bias_train <- foreach(i = 1:ml, .combine = "c",
+                          .packages = "Matrix") %dopar% {
+  gen[,mid_train[i]] %*% u_beta[[uid_train[i]]][-1] + 
+                              u_beta[[uid_train[i]]][1]}
+
+rm(ml, uid_train, mid_train)
+
+#create a new column called "err" = rsid
+resid_gen <- m_bias[u_bias[edx[, .(userId, movieId, rating)][
+  , gen_bias := gen_bias_train], on = .(userId)], on = .(movieId)][
+    , err := g_mean + u_bias + m_bias - gen_bias - rating]
+
+#turn the 'err' = rsid column into a wide table with size of user# X movie#
+rtable_gen <- dcast(resid_gen, userId ~ movieId, value.var = "err")
+
+#keep the order of userId and movieId in training matrix
+#will be used for naming the training output user matrix and movie matrix
+uid_gen <- rtable_gen[,1]
+mid_gen <- names(rtable_gen)[-1]
+
+#turn the above table into a sparse matrix, which is more RAM friendly
+rtable_gen <- setnafill(rtable_gen[,-1], fill = 0)
+rtable_gen <- Matrix(as.matrix(rtable_gen), "sparseMatrix")
+
+R <- rtable_gen@x #training resid
+U_i <- rtable_gen@i + 1 #user index of each resid
+M_j <- rep(1:rtable_gen@Dim[2], diff(rtable_gen@p)) #movie index of each resid
+
+rm(resid_gen, rtable_gen)
+```
+
+```{r eval = FALSE}
+#####hyperparameters tunning
+#create train-test set(1 fold)
+set.seed(0, sample.kind = "Rounding")
+
+Rid_cv <- createFolds(1:length(R), 5)
+Rid_cv <- Rid_cv[[1]] #(just use 1 fold)
+
+train_R <- R[-Rid_cv]
+test_R <- R[Rid_cv]
+
+#saved in place for future loop 
+tr_n <- length(train_R)
+tst_n <- length(test_R)
+
+#train-test userid, movieid sets
+Ui_tr <- U_i[-Rid_cv]
+Ui_tst <- U_i[Rid_cv]
+
+Mj_tr <- M_j[-Rid_cv]
+Mj_tst <- M_j[Rid_cv]
+```
+
+In hyperparameter tuning, we use **Stochastic Gradient Descent** instead of going through all the 9,000,055 ratings, because SGD is super efficient in terms of learning speed, but not great at convergence. So we only use SGD to find the good parameter estimates, but use full size gradient descent (GD) in the final learning. The SGD has exactly the same iterations as normal GD described in above, but only train on a small sample (batch) of the full dataset in every epoch. 
+```{r eval = FALSE}
+###factor length###
+#these try on figures are randomly chosen
+lambda <- 1
+L_rate <- 0.05
+
+#we will iterate batch_size samples each time, and repeat epochs times
+epochs <- 1000
+batch_size <- 10000
+
+factors <- seq(20, 30, 1)
+f_tune <- foreach(f = factors, .combine = "c") %dopar% {
+  set.seed(3, sample.kind = "Rounding")
+  P <- matrix(runif(f*rtable_gen@Dim[1], 0, 1), nrow = f)
+  set.seed(4, sample.kind = "Rounding")
+  Q <- matrix(runif(f*rtable_gen@Dim[2], 0, 1), nrow = f)
+ 
+  for (t in 1:epochs){
+    
+    batch_id <- sample(1:tr_n, batch_size, replace = FALSE)
+    
+    for (ui in batch_id){
+      
+      err_ui <- c(P[, Ui_tr[ui]] %*% Q[, Mj_tr[ui]] - train_R[ui])
+      nabla_p <- err_ui * Q[, Mj_tr[ui]]  + lambda * P[,Ui_tr[ui]]
+      nabla_q <- err_ui * P[, Ui_tr[ui]]  + lambda * Q[,Mj_tr[ui]]
+      
+      P[, Ui_tr[ui]] <- P[, Ui_tr[ui]] - L_rate * nabla_p
+      Q[, Mj_tr[ui]] <- Q[, Mj_tr[ui]] - L_rate * nabla_q
+    }
+  }
+  err <- sapply(1:tst_n, function(j){
+    P[, Ui_tst[j]] %*% Q[, Mj_tst[j]] - test_R[j]
+  })
+  rm(P, Q)
+  sqrt(mean(err * err))
+}
+
+f_opt <- factors[which.min(f_tune)] #save the tuned factor length for future
+
+rm(f_tune, factors) #can be kept for plotting
+```
+
+```{r echo = FALSE}
+qplot(x = factors, y = f_tune, geom = c("point", "line"))
+```
+
+```{r eval = FALSE}
+###learning rate###
+rm(L_rate)
+
+Lrts <- seq(0.01, 0.1, 0.01)
+Lr_tune <- foreach(L_rate = Lrts, .combine = "c") %dopar% {
+  set.seed(3, sample.kind = "Rounding")
+  P <- matrix(runif(f_opt*rtable_gen@Dim[1], 0, 1), nrow = f_opt)
+  set.seed(4, sample.kind = "Rounding")
+  Q <- matrix(runif(f_opt*rtable_gen@Dim[2], 0, 1), nrow = f_opt)
+ 
+  for (t in 1:epochs){
+    
+    batch_id <- sample(1:tr_n, batch_size, replace = FALSE)
+    
+    for (ui in batch_id){
+      
+      err_ui <- c(P[, Ui_tr[ui]] %*% Q[, Mj_tr[ui]] - train_R[ui])
+      nabla_p <- err_ui * Q[, Mj_tr[ui]]  + lambda * P[,Ui_tr[ui]]
+      nabla_q <- err_ui * P[, Ui_tr[ui]]  + lambda * Q[,Mj_tr[ui]]
+      
+      P[, Ui_tr[ui]] <- P[, Ui_tr[ui]] - L_rate * nabla_p
+      Q[, Mj_tr[ui]] <- Q[, Mj_tr[ui]] - L_rate * nabla_q
+    }
+  }
+  err <- sapply(1:tst_n, function(j){
+    P[, Ui_tst[j]] %*% Q[, Mj_tst[j]] - test_R[j]
+  })
+  rm(P, Q)
+  sqrt(mean(err * err))
+}
+```
+
+```{r echo = FALSE}
+qplot(x = Lrts, y = Lr_tune, geom = c("point", "line"))
+```
+
+This time the learning rate tuning rmse plot does not have a turning point, so instead we can locate the best rate by their slopes, when the tuning rmse slopes get smaller, the improvement by the next learning rate fade. Then we can define the first learning rate, whose slope drops under certain level, to be our choice of optimal learning rate. 
+```{r eval = FALSE}
+
+lr_slope <- sapply(1:(length(Lr_tune) - 1), function(k){
+  abs(Lr_tune[k+1] - Lr_tune[k]) / 0.001})
+
+#set our selection level at 0.1
+#a smaller number, but will slow down the final learning process
+L_rate_opt <- Lrts[which(lr_slope < 0.1)][1]
+
+rm(Lrts, Lr_tune, lr_slope)#can be kept for plotting
+```
+
+```{r echo = FALSE}
+qplot(x = Lrts[-length(Lrts)], y = lr_slope, geom = c("point","line"))
+```
+
+We will use the the full GD method instead of SGD to find the best $\lambda$, so there is one challenge in computation cost. Since $\lambda$ decides how close our learning result can be to the real minimum point, we want to granulate our increment in the try on sequence. On top of that, we also use the full gradient descent (GD) method instead of SGD to tune the $lambda$ to mimic our final learning computation process. So granular increment try on sequence plus the full size GD together just instantly increase the computation steps exponentially. So to overcome the slow loop obstacle in R, we are using the 'RcppArmadillo' package to write the gradient descent loop in C++, and source the C++ code back to R as a function. We name this C++ sourced function as 'gdtune()' in below code, the C++ code can be found in Appendix at the very end of this report. The manual to use the C++ code can be found on the 'Rcpp' package cran page. 
+```{r eval = FALSE}
+####lambda
+rm(lambda)
+
+set.seed(3, sample.kind = "Rounding")
+P <- matrix(runif(f_opt*rtable_gen@Dim[1], 0, 1), nrow = f_opt)
+set.seed(4, sample.kind = "Rounding")
+Q <- matrix(runif(f_opt*rtable_gen@Dim[2], 0, 1), nrow = f_opt)
+
+lmds <- c(seq(0.01, 0.1, length.out = 5),
+          seq(0.1, 1, length.out = 5),
+          1:5)
+
+lmd_tune <- sapply(lmds, function(lmd){
+  gdtune(P = P, Q = Q, ytr = train_R, ytst = test_R,
+         Uitr = Ui_tr, Mjtr = Mj_tr, Uitst = Ui_tst, Mjtst = Mj_tst,
+         L_rate = L_rate_opt, lambda = lmd, epochs = 5)
+  }) 
+#this C++ loop only returns the sum of error^2 for each lambda value
+```
+
+```{r eval = FALSE}
+#use the sum of error^2 to produce rmse results
+lmd_tune <- sqrt(lmd_tune / length(test_R))
+```
+
+we can visualise the minimum point in the valley of the $\lambda$ tuning RMSE curve.
+```{r echo = FALSE}
+qplot(x = lmds, y = lmd_tune, geom = c("point", "line"))
+```
+
+```{r eval = FALSE}
+lmd_opt <- lmds[which.min(lmd_tune)]
+
+rm(P, Q, lmds, lmd_tune)##can be kept for plotting
+```
+
+Up to now, we have tuned all the important hyperparameters to be ready to give us an expected good result. Rigorously speaking, we have not done all the parameters yet, that is because our training dataset size allow us to risk the epochs (iteration steps) number by guessing. The industrial practice may require the epochs to be tuned as well, because too large epochs may cause the model to be over trained, over training will also increase prediction error like overfitting [@nielsen_2015]. This final piece of code to put all the tuned hyperparameters together is also written in C++, and sourced as function gd(), the C++ code is put in Appendix at very end of report.
+```{r eval = FALSE}
+#the user matrix P, and movie matrix Q are generated inside the gd() function
+#the seed for C++ sourced function need to be set in R
+#loop the model for 50 epochs
+set.seed(5, sample.kind = "Rounding")
+pq <- gd(U_i = U_i, M_j = M_j, y = R,
+         u_n = rtable_gen@Dim[1], m_n = rtable_gen@Dim[2],
+         factor_n = f_opt, L_rate = L_rate_opt,
+         lambda = lmd_opt, epochs = 50)
+```
+
+The gd() function returns a list we named as **pq**, that contains trained user matrix P with each column representing an 'userId', and movie matrix Q with each column representing a 'movieId'. We can use the code below to check any 'nan' value in them, the 'nan' is the result of training explosion, which means either the learning rate or the $\lambda$ is too big, then we need to retune them. 
+```{r}
+sum(is.nan(pq$P))
+sum(is.nan(pq$Q))
+```
+
+We also apply the 'userId' order and 'movieId' order to the matrix P, Q, which was recorded before from the rsid matrix code part. Then matrix P, Q's column names can be called by 'userId' and 'movieId', which will be convenient in the final prediction composition. 
+```{r eval = FALSE}
+colnames(pq$P) <- uid_gen$userId %>% as.character()
+colnames(pq$Q) <- mid_gen
+```
+
+By the end of this session, we have got all the elements in our prediction model 
+$\hat{r}_{ui} = \bar{r}_g + b_u + b_m + b_g + lf_{ui}$, where both $b_g$ and $lf_{ui}$ have to be composed according to the predicted rating's 'userId' and 'movieId'.
 
 ## Final result
+As described in above, to make a prediction, we have to know the rating of the 'movieId' is given by which 'userId', then we can composite the $b_g$ and $lf_{ui}$ accordingly, and put these 'userId' and 'movieId' specified elements into prediction model. We will use the 'userId' and 'movieId' from each rating in the 'validation' dataset, to call the respective element vectors in the following prediciton composition code chunk. 
+```{r eval = FALSE}
+
+#get the 'userId' and 'movieId' from validation dataset
+uid_val <- validation$userId %>% as.character()
+mid_val <- validation$movieId %>% as.character()
+
+i <- length(validation$rating)
+#use the 'userId' and 'movieId' to call 
+#the respective movie and user gen vectors for gen_bias
+gen_bias <- foreach(i = 1:i, .combine = "c") %dopar% {
+  gen[,mid_val[i]] %*% u_beta[[uid_val[i]]][-1] + u_beta[[uid_val[i]]][1]
+}
+
+#call the user/movie id respective latent factor vectors for lf_ui
+f_gd <- foreach(i = 1:i, .combine ="c") %dopar% {
+  pq$P[, uid_val[i]] %*% pq$Q[, mid_val[i]]
+}
+
+#make prediction and get the error for next RMSE
+pred <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
+  , ":="(gen_bias = gen_bias, f_gd = f_gd)], on = .(userId)],
+  on = .(movieId)][
+    , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - f_gd,
+           err = pred - rating)]
+```
+
+We now use the prediction error from above calculation to get the \textcolor{blue}{**Final RMSE**}:
+```{r}
+sqrt(mean(pred$err * pred$err))
+```
+
+The goal of prediction **RMSE** $<$ \textcolor{red}{0.86490} is reached.
 
 ## Conclusion
 
@@ -616,3 +891,93 @@ We will find the best $\vec{p}_u$ and $\vec{q}_i$ for each user and movie respec
 <div id="refs"></div>
 
 ## Appendix
+```{r eval = FALSE}
+###this code chunk represent the function gdtune() is written in C++
+##this function returns the sum of squared error for each lambda
+###see the manual in below cran link for manual to use C++ coded function in R
+###https://cran.r-project.org/web/packages/Rcpp/index.html
+
+// [[Rcpp::depends(RcppArmadillo)]]
+
+#include <RcppArmadillo.h>
+using namespace arma;
+
+// [[Rcpp::export]]
+double gdtune(mat P, mat Q, 
+               Rcpp::NumericVector ytr,
+               Rcpp::NumericVector ytst,
+               Rcpp::NumericVector Uitr,
+               Rcpp::NumericVector Uitst,
+               Rcpp::NumericVector Mjtr,
+               Rcpp::NumericVector Mjtst,
+               double L_rate, double lambda, 
+               int epochs){
+  vec err(ytst.size());
+  double se;
+  
+  for(int i = 0; i < epochs; i++){
+    for(int j = 0; j < ytr.size(); j++){
+      int ui = Uitr(j) - 1;
+      int mj = Mjtr(j) - 1;
+      double err = dot(P.col(ui), Q.col(mj)) - ytr(j);
+      
+      vec nabla_P_temp = err * Q.col(mj) + lambda * P.col(ui);
+      vec nabla_Q_temp = err * P.col(ui) + lambda * Q.col(mj);
+      
+      P.col(ui) -= L_rate * nabla_P_temp;
+      Q.col(mj) -= L_rate * nabla_Q_temp;
+    }
+  }
+  
+  for(int k = 0; k < ytst.size(); k++){
+    int ui = Uitst(k) - 1;
+    int mj = Mjtst(k) - 1;
+    err(k) = dot(P.col(ui), Q.col(mj)) - ytst(k);
+  }
+  
+  se = dot(err, err);
+
+  return se;
+}
+
+```
+
+```{r eval = FALSE}
+###this is the final gd() function code in C++
+##this function returns a list contains factor_length by user_num matrix P
+##and factor_length by movie_num matrix Q
+
+// [[Rcpp::depends(RcppArmadillo)]]
+
+#include <RcppArmadillo.h>
+using namespace arma;
+
+// [[Rcpp::export]]
+Rcpp::List gd(Rcpp::NumericVector U_i, 
+              Rcpp::NumericVector M_j, 
+              Rcpp::NumericVector y, 
+              int u_n, int m_n, int factor_n, 
+              double L_rate, double lambda, int epochs){
+  
+  mat P(factor_n, u_n, fill::randu);
+  mat Q(factor_n, m_n, fill::randu);
+  
+  for(int i = 0; i < epochs; i++){
+    for(int j = 0; j < y.size(); j++){
+      int ui = U_i(j) - 1;
+      int mj = M_j(j) - 1;
+      double err = dot(P.col(ui), Q.col(mj)) - y(j);
+      
+      vec nabla_P_temp = err * Q.col(mj) + lambda * P.col(ui);
+      vec nabla_Q_temp = err * P.col(ui) + lambda * Q.col(mj);
+      
+      P.col(ui) -= L_rate * nabla_P_temp;
+      Q.col(mj) -= L_rate * nabla_Q_temp;
+    }
+  }
+  
+  return Rcpp::List::create(Rcpp::Named("P") = P,
+                            Rcpp::Named("Q") = Q);
+}
+
+```
