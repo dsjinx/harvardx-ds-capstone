@@ -636,6 +636,8 @@ gen_bias_train <- foreach(i = 1:ml, .combine = "c",
 rm(ml, uid_train, mid_train)
 
 #create a new column called "err" = rsid
+#!!be aware the "gen_bias" is subtracted in here, because it was trained using 
+#residual = mean + b_u + b_m - rating!!
 resid_gen <- m_bias[u_bias[edx[, .(userId, movieId, rating)][
   , gen_bias := gen_bias_train], on = .(userId)], on = .(movieId)][
     , err := g_mean + u_bias + m_bias - gen_bias - rating]
@@ -869,7 +871,10 @@ f_gd <- foreach(i = 1:i, .combine ="c") %dopar% {
   pq$P[, uid_val[i]] %*% pq$Q[, mid_val[i]]
 }
 
-#prediction composition and get the error for RMSE calculation 
+#prediction composition and get the error for RMSE calculation
+#!!be aware the "gen_bias" and "f_gd" are subtracted in prediction composition
+#by the reason that both of them were trained from the residuals 
+#mean + u_b + m_b - rating & mean + u_b + m_b - g_b - rating!!
 pred <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
   , ":="(gen_bias = gen_bias, f_gd = f_gd)], on = .(userId)],
   on = .(movieId)][
@@ -904,8 +909,16 @@ prederr_tbl <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
   ]
 
 rmse_tbl <- prederr_tbl[, lapply(.SD, function(i) sqrt(mean(i * i)))]
+rmse_tbl <- data.table(
+  contributors = c("g_mean", 
+                  "g_mean + u_bias", 
+                  "g_mean + u_bias + m_bias",
+                  "g_mean + u_bias + m_bias + gen_bias",
+                  "g_mean + u_bias + m_bias + gen_bias + latent_factor"),
+  RMSE = rmse_tbl[2,])
 knitr::kable()
 ```
+* "g_mean + u_bias + m_bias + gen_bias + latent_factor" is for demonstration only, the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", please refer the code chunk in above for explanations.  
 
 ## Refnereces
 
