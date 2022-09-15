@@ -189,7 +189,7 @@ That 'userId' and 'movieId' matching process makes the rating matrix of 'validat
 
 After we identified our problem mathematically, one of the most popular algorithm to solve this problem is \textcolor{blue}{Latent Factor method} by @Koren2009. so we will imitate this $1 million algorithm, but in a rather simple way with an extra step of searching user's genres info, which is not included in the dataset. 
 
-## Methods details
+## Methods Details
 Before we get into the details of our algorithm, we will build some basic understanding on it first. 
 
 ###Foundations
@@ -803,7 +803,7 @@ lmd_tune <- sapply(lmds, function(lmd){
          Uitr = Ui_tr, Mjtr = Mj_tr, Uitst = Ui_tst, Mjtst = Mj_tst,
          L_rate = L_rate_opt, lambda = lmd, epochs = 5)
   }) 
-#this C++ loop only returns the sum of error^2 for each lambda value
+#this C++ loop only returns the 'sum of error^2' for each lambda value
 ```
 
 ```{r eval = FALSE}
@@ -849,7 +849,7 @@ colnames(pq$Q) <- mid_gen
 By the end of this session, we have got all the elements in our prediction model 
 $\hat{r}_{ui} = \bar{r}_g + b_u + b_m + b_g + lf_{ui}$, where both $b_g$ and $lf_{ui}$ have to be composed according to the predicted rating's 'userId' and 'movieId'.
 
-## Final result
+## Final Result
 As described in above, to make a prediction, we have to know the rating of the 'movieId' is given by which 'userId', then we can composite the $b_g$ and $lf_{ui}$ accordingly, and put these 'userId' and 'movieId' specified elements into prediction model. We will use the 'userId' and 'movieId' from each rating in the 'validation' dataset, to call the respective element vectors in the following prediciton composition code chunk. 
 ```{r eval = FALSE}
 
@@ -869,7 +869,7 @@ f_gd <- foreach(i = 1:i, .combine ="c") %dopar% {
   pq$P[, uid_val[i]] %*% pq$Q[, mid_val[i]]
 }
 
-#make prediction and get the error for next RMSE
+#prediction composition and get the error for RMSE calculation 
 pred <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
   , ":="(gen_bias = gen_bias, f_gd = f_gd)], on = .(userId)],
   on = .(movieId)][
@@ -882,9 +882,30 @@ We now use the prediction error from above calculation to get the \textcolor{blu
 sqrt(mean(pred$err * pred$err))
 ```
 
-The goal of prediction **RMSE** $<$ \textcolor{red}{0.86490} is reached.
+The goal of prediction \textcolor{blue}{**RMSE:0.8081552**} $<$ \textcolor{red}{0.86490} is reached. 
 
 ## Conclusion
+To summarise what we have done to reach our RMSE goal, the whole process is broken into 4 big parts: data exploration, problem identification, model construction, and code implementation. In the data exploration, we get a picture of the dataset, then we simplified the multi attributes rating into a user-movie rating matrix, so by inspiration of the "Latent Factor" algorithm of @Koren2009, our goal becomes a matrix factorisation problem on a mathematical ground. Around this concept, we further break down those attributes into user factors and movie factors, and use them to build a model that is versatile enough to predict any user-movie paired rating. 
+
+Beside the "Latent Factor" as the core in our algorithm, we employed an "Elastic Net" with the movie genres to derive genres vector for each user. Although we can use "Latent Factor" directly on the ratings without exploiting the hidden user genres info, but this extra approach is believed not only can improve the "Latent Factor" learning speed afterward, but also can improve a recommendation system accuracy with more user attributes data, such as movie search histories, and if this recommendation system is used in Amazon Prime Video, then we will have much richer user info connected with their shopping behaviour, then this user genres info can be used for classifying them into different groups, then we could have a group bias, which can reduce computation cost, for new customers we can provide a better service to meet their broad tastes without throwing darts blindly. We have to bare in mind that, the real world data is much larger and complicated, so reduce computation cost can improve data efficiency to companies, as well as customer experiences. 
+
+Even though our prediction RMSE is much lower than the target, we can not guarantee the same result in the real world, since we are playing in a naive dataset. Especially in the case of newly onboarded customer, we have no watch history about her, then we are really throwing darts in dark to push the movie she might like. So except for the taste information we argued in above, we can also use the timestamp info that was neglected by us in report, we can push the concurrent popular movies to her to test the taste. 
+
+At the very end of this report, we put the table of RMSE path of our model to demonstrate how effectiveness of the "Latent Factor" algorithm in a recommendation system is. 
+```{r echo = FALSE}
+prederr_tbl <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
+  , ":="(gen_bias = gen_bias, f_gd = f_gd)], on = .(userId)],
+  on = .(movieId)][, 
+              .(err0 = g_mean - rating, 
+                err1 = g_mean + u_bias - rating,
+                err2 = g_mean + u_bias + m_bias - rating,
+                err3 = g_mean + u_bias + m_bias - gen_bias - rating,
+                err4 = g_mean + u_bias + m_bias - gen_bias - f_gd - rating)
+  ]
+
+rmse_tbl <- prederr_tbl[, lapply(.SD, function(i) sqrt(mean(i * i)))]
+knitr::kable()
+```
 
 ## Refnereces
 
