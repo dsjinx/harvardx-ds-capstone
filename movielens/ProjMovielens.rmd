@@ -12,6 +12,16 @@ library(data.table)
 library(doParallel)
 library(Matrix)
 ```
+```{r eval = FALSE}
+#libraries are used in this report
+library(tidyverse)
+library(data.table)
+library(caret)
+library(Matrix)
+library(doParallel)
+library(glmnet)
+library(RcppArmadillo)
+```
 
 ## Executive summary
 We are going to create a movie recommendation system in this project. This system can predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{0.8053019}. The algorithm is based on the Netflix winning latent factor method [@Koren2009], but a rather vanilla version with an extra step of searching user's genres. 
@@ -873,16 +883,17 @@ prederr_tbl <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
   ]
 
 rmse_tbl <- prederr_tbl[, lapply(.SD, function(i) sqrt(mean(i * i)))]
-rmse_tbl <- data.table(
+rmse_tbltmp <- data.table(
   contributors = c("g_mean", 
                   "g_mean + u_bias", 
                   "g_mean + u_bias + m_bias",
                   "g_mean + u_bias + m_bias + gen_bias",
                   "g_mean + u_bias + m_bias + gen_bias + latent_factor"),
-  RMSE = rmse_tbl[2,])
-knitr::kable()
+                  RMSE = c(rmse_tbl[1,]))
+knitr::kable(rmse_tbltmp)
+rm(prederr_tbl, rmse_tbl, rmse_tbltmp)
 ```
-* "g_mean + u_bias + m_bias + gen_bias + latent_factor" is for demonstration only, the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", please refer the code chunk in above for explanations.  
+\textcolor{red}{* "g_mean + u_bias + m_bias + gen_bias + latent_factor" is for demonstration only, the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", please refer the code chunk in above for explanations.}  
 
 ## Refnereces
 
