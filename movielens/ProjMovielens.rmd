@@ -5,18 +5,16 @@ date: "Sep, 2022"
 output: pdf_document
 bibliography: references.bib
 ---
+```{r include = FALSE}
+# these libraries are used
+library(tidyverse)
+library(data.table)
+library(doParallel)
+library(Matrix)
+```
 
-an introduction/overview/executive summary section that describes the dataset and summarizes the goal of the project and key steps that were performed
-
-a methods/analysis section that explains the process and techniques used, including data cleaning, data exploration and visualization, insights gained, and your modeling approach
-
-a results section that presents the modeling results and discusses the model performance
-
-a conclusion section that gives a brief summary of the report, its limitations and future work
-
-40 points: The report includes all required sections, is easy to follow with good supporting detail throughout, and is insightful and innovative.
 ## Executive summary
-We are going to create a movie recommendation system in this project. This system will predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{0.8081552}. The algorithm is based on the Netflix winning latent factor method [@Koren2009], but a rather vanilla version with an extra step of searching user's genres. 
+We are going to create a movie recommendation system in this project. This system can predict the possible rating a movie likely to receive from the specified user. We use the RMSE(root mean square error) to evaluate our algorithm performance, and the final achieved RMSE is \textcolor{blue}{0.8053019}. The algorithm is based on the Netflix winning latent factor method [@Koren2009], but a rather vanilla version with an extra step of searching user's genres. 
 
 ## Introduction
 This project is inspired by the $1 million prize competition hosted by Netflix in 2006. The rule of winning is to achieve a 10% more improvement on RMSE, comparing to Netflix own in house algorithm. But in this project, we just use a fraction of Netflix competition dataset (our 10m version against the original size of 100m [@Töscher09]). Our goal in here is simply to achieve a \textcolor{blue}{RMSE < 0.86490} between our prediction and validation set ratings.
@@ -94,29 +92,18 @@ rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
 We will use the `edx` data to develop and train our model, then apply the trained model on the `validation` data to predict the rating with respect to the user/movie pairs, and evaluate the prediction against the real ratings by the **RMSE** method. So let's look at the macro structure of the dataset first. 
 
-```{r include = FALSE}
-# these libraries are used
-library(tidyverse)
-library(data.table)
-library(caret)
-library(Matrix)
-library(doParallel)
-library(glmnet)
-library(RcppArmadillo)
-load("~/Work/Rproj/PH125.9x/harvardx-ds-capstone/misc/edx.Rdata")
-load("~/Work/Rproj/PH125.9x/harvardx-ds-capstone/misc/val.Rdata")
-```
-
 Here is the macro view of `edx` dateset:
 ```{r echo = FALSE}
 edx_temp <- head(edx)
 knitr::kable(edx_temp)
+rm(edx_temp)
 ```
 
 Here is the macro view of `validation` dataset:
 ```{r echo = FALSE}
 val_temp <- head(validation)
 knitr::kable(val_temp)
+rm(val_temp)
 ```
 
 Comparing the `edx` and `validation` dataset, we can tell the `edx` has the size of 9,000,055 × 6, is just a longer version of `validation` with the size of 999,999 × 6.
@@ -127,12 +114,15 @@ df_count <-data.frame(set = c("edx", "validation"),
 
 knitr::kable(df_count)
 
-ggplot(df_count, aes(set, y = log(set_length))) + 
+ggplot(df_count, aes(set, y = log(dataset_length))) + 
   geom_bar(stat = "identity", aes(y = log(size)), width = 0.4)
+rm(df_count)
 ```
 
 When we look into the details of 'edx' dataset, we have:
 ```{r echo = FALSE}
+options{width = 75}
+
 names(edx)
 ```
 
@@ -150,12 +140,13 @@ sample <- edx[, timestamp :=
                 as.Date(as.POSIXct(timestamp, origin="1970-01-01"))][9,]
 
 knitr::kable(sample)
+rm(sample)
 ```
 
 We can tell this user by 'userId' = 1 rated the movie "The Lion King" with 'movieId' = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised under Adventure|Animation|Children|Drama|Musical. 
 
 So our job is to use these user and movie info to predict the 'rating', and the 'rating' is ranged between:
-```{r echo = FALSE}
+```{r}
 range(edx$rating)
 ```
 
@@ -168,18 +159,18 @@ df_sparse <- data.table(x = c("user_num", "movie_num", "rating_num"),
 
 ggplot(df_sparse, aes(x, y = log(x_num))) + 
   geom_bar(stat = "identity", aes(y = log(y)), width = 0.4)
+rm(df_sparse)
 ```
 
 Theoretically, there should be: 
 ```{r}
 uniqueN(edx$userId) * uniqueN(edx$movieId)
 ```
+this number of total ratings, but instead we only got 9,000,055 in our dataset. Of course, this is very reasonable, since it is not possible for everyone watched all the movies, and it is also possible for one has watched the movie, but did not rate it. In other word, we can view this as a big matrix with the dimension of user_num: 69878 * movie_num: 10677, however this matrix is highly sparse with only rating_num: 9,000,055 non zero elements, and the reset are all zero. Mathematically, we call this kind of matrix a \textcolor{blue}{"sparse matrix"}. 
 
-above number of total ratings, but instead we only got 9,000,055 in our dataset. Of course, this is very reasonable, since it is not possible for everyone watched all the movies, and it is also possible for one has watched the movie, but did not rate it. In other word, we can view this as a big matrix with the dimension of user_num: 69878 * movie_num: 10677, however this matrix is highly sparse with only rating_num: 9,000,055 non zero elements, and the reset are all zero. Mathematically, we call this kind of matrix a \textcolor{blue}{"sparse matrix"}. 
-
-From the code at very beginning helped us get the 'edx' and 'validation' datasets, we can tell the 'validation' data is intentionally built based on users and movies of 'edx', which we will use for our algorithm development.
+From the code snippet at very beginning helped us get the 'edx' and 'validation' datasets, we can tell the 'validation' data is intentionally built based on users and movies of 'edx', which we will use for our algorithm development.
 ```{r eval = FALSE}
-# Make sure userId and movieId in validation set are also in edx set
+# it makes userId and movieId in validation set are also in edx set
 validation <- temp %>% 
       semi_join(edx, by = "movieId") %>%
       semi_join(edx, by = "userId")
@@ -250,7 +241,7 @@ So in our rating matrix, we have to centralise in both row and column directions
 #global mean
 g_mean <- mean(edx$rating)
 ```
-The global mean we just got is the centre of all the available ratings, so it is neither the mean of any user nor mean of any movie. But we can assume this global mean is the centre of all the means of every user, as well as cenre of all the means of each movie, so we can estimate each user's real mean by $User_u\_mean = g\_mean + u\_bias$. 
+The "global mean" we just get is the centre of all the available ratings, so it is neither the mean of any user nor mean of any movie. But we can assume this global mean is the centre of all the means of every user, as well as cenre of all the means of each movie, so we can estimate each user's real mean by $User_u\_mean = g\_mean + u\_bias$. 
 
 How can we find the best u_bias for each user? We aim to minimise the $RMSE$:
 $$RMSE = \sqrt{\frac{\sum_{ui \in N}(\hat{r}_{ui} - r_{ui})^2}{N}}$$ 
@@ -304,11 +295,11 @@ rm(ind_cv)
 We use the generated folds in above to search the best $\lambda$:
 ```{r eval = FALSE}
 
-lambda_search <- seq(4, 8, 0.1)
+lambdau_search <- seq(4, 8, 0.1)
 
 #try all the possible lambdas, and result in a RMSE table
 
-ub_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
+ub_tune <- foreach(l = lambdau_search, .combine = "cbind.data.frame") %:% 
   foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
     u_bias <- train_cv[[k]][
       , .(u_bias = sum(rating - g_mean) / (l + .N)), by = .(userId)]
@@ -318,33 +309,29 @@ ub_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:%
     
     sqrt(mean(pred$err * pred$err))
   }
-```
 
-```{r}
 setDT(ub_tune)
-setnames(ub_tune, as.character(lambda_search))
+setnames(ub_tune, as.character(lambdau_search))
 
 #take the mean value over each column 
 #to get the final cross validation result for each lambda
 ub_rmse <- ub_tune[, lapply(.SD, mean)]
-
-ub_rmse
 ```
 
 ```{r echo = FALSE}
-qplot(lambda_search, as.numeric(ub_rmse[1, ]), geom = c("point", "line"), 
+qplot(lambdau_search, as.numeric(ub_rmse[1, ]), geom = c("point", "line"), 
       main = "Lambda search visualisation of u_bias")
 ```
 
 ```{r eval = FALSE}
 #take the lambda with the best cross validation RMSE
 #apply it to the u_bias formula
-lambda_u <- lambda_search[which.min(ub_rmse[1,])]
+lambda_u <- lambdau_search[which.min(ub_rmse[1,])]
 
 u_bias <- edx[, .(u_bias = sum(rating - g_mean) / (lambda_u + .N)), 
                        by = .(userId)]
 
-rm(ub_rmse, ub_tune, lambda_search, lambda_u)
+rm(ub_rmse, ub_tune, lambdau_search, lambda_u)
 ```
 
 We can use the same method to find the bias of each movie, so that our mean is adjusted not only toward each user real mean, but also toward each movie real mean. So the $\hat{r}_{ui} \sim g\_mean + u\_bias + m\_bias$, and the $b_m$ is:
@@ -355,11 +342,11 @@ From the above formula we can tell, the movie's real mean varies on each user. I
 
 ```{r eval = FALSE}
 
-lambda_search <- seq(1, 5, 0.1)
+lambdam_search <- seq(1, 5, 0.1)
 
 #again try all the possible lambdas, and result in a RMSE table
 
-mb_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:% 
+mb_tune <- foreach(l = lambdam_search, .combine = "cbind.data.frame") %:% 
   foreach(k = 1:5, .combine = "c", .packages = "data.table") %dopar% {
     m_bias <- u_bias[train_cv[[k]], on = .(userId)][
       , .(m_bias = sum(rating - g_mean - u_bias) / (l + .N)), 
@@ -372,35 +359,30 @@ mb_tune <- foreach(l = lambda_search, .combine = "cbind.data.frame") %:%
     
     sqrt(mean(pred$err * pred$err))
   }
-```
-
-```{r}
 
 setDT(mb_tune)
-setnames(mb_tune, as.character(lambda_search))
+setnames(mb_tune, as.character(lambdam_search))
 
 #take the mean value over each column 
 #to get the final cross validation result for each lambda
 mb_rmse <- mb_tune[, lapply(.SD, mean)]
-
-mb_rmse
 ```
 
 ```{r echo = FALSE}
-qplot(lambda_search, as.numeric(mb_rmse[1,]), geom = c("point", "line"), 
+qplot(lambdam_search, as.numeric(mb_rmse[1,]), geom = c("point", "line"), 
       main = "Lambda search visualisation of m_bias")
 ```
 
 ```{r eval = FALSE}
 #take the lambda with the best cross validation RMSE
 #apply it to the u_bias formula
-lambda_m <- lambda_search[which.min(mb_rmse[1,])]
+lambda_m <- lambdam_search[which.min(mb_rmse[1,])]
 
 m_bias <- edx[u_bias, on = .(userId)][
   , .(m_bias = sum(rating - g_mean - u_bias) / (lambda_m + .N)), 
   by = .(movieId)]
 
-rm(mb_tune, mb_rmse, lambda_search, lambda_m, train_cv, test_cv)
+rm(mb_tune, mb_rmse, lambdam_search, lambda_m, train_cv, test_cv)
 ```
 
 By now, we have finished the centralisation process under 
@@ -408,7 +390,6 @@ $\bar{r}_{ui} = \bar{r}_{g} + b_u + b_m$. We have to stress that this $\bar{r_{u
 
 ###Genres Bias
 ```{r, echo = FALSE}
-options(width = 70)
 
 knitr::kable(edx[9,])
 ```
@@ -452,9 +433,7 @@ gen_mean <- foreach(g = 1:n, .combine = "c",
                       u_bias[m_bias[edx, on = .(movieId)],
                              on = .(userId)][genres %like% gen_cat[g],
                               mean(g_mean + u_bias + m_bias - rating)]}
-```
-
-```{r eval = FALSE}
+rm(n)
 
 m_id <- unique(edx$movieId)
 m_n <- length(m_id)
@@ -473,9 +452,9 @@ The next code chunk may be a bit confusing at beginning, what it does is to crea
 knitr::kable(edx[9, .(movieId, title, genres)])
 ```
 ```{r echo = FALSE}
+#to get this to work, run the next code chunk first
 gen[, c("gen_cat","364")][1:10,]
 ```
-
 ```{r eval = FALSE}
 
 ind <- foreach(g = 1:m_n, .packages = "foreach") %dopar% {
@@ -514,11 +493,11 @@ Because of this lasso-ridge hybrid structure, makes it to be specially useful in
 
 To use the 'glmnet' we need to make some clarifications in the above formula in our purpose:
 1. the $y_{ui}$ is the rating element in a 'movieId'$\times$'userId' rating matrix, which is just a transpose of R we used in above. 
-2. $\vec{x}_m^{T}$ is a row vector with its elements are all 19 genres we have in the dataset, but with only that movie categorised genres filled with the genre mean, and reset genres slots are all zero. 
-3. $\beta_0$ and $\vec\beta_u$ is a set of value to be returned by the fitting, they are in together to represent one single user's genres structure. We used the word structure to stress that, the $\vec{\beta}_u$ has the same length as $\vec{x}_m$, we also assume the user's genres preferences can be categorised in a mixture of these 19 genres we have. And the $\beta_0$ here is to be treated as a central point of all the genres to a user. 
+2. $\vec{x}_m^{T}$ is a row vector with its elements are all 20 genres (including the "no genres listed": empty genres for that movie) we have in the dataset, but with only that categorised genres of the movie filled with the respective genres means, and reset genres slots are all zero. 
+3. $\beta_0$ and $\vec\beta_u$ is a set of value to be returned by the fitting, they are in together to represent one single user's genres structure. We used the word structure to stress that, the $\vec{\beta}_u$ has the same length as $\vec{x}_m$, we also assume the user's genres preferences can be categorised in a mixture of these 20 genres we have. And the $\beta_0$ here is to be treated as a central point of all the genres to a user. 
 4. The $\lambda$ is acting as the traditional penalty coefficient to prevent overfitting. The nice thing about using 'glmnet' package is that, it tunes the $\lambda$ by cross validation, and apply it in fitting result. 
 5. $\alpha$ is a weighting factor to provide the flexibility for us to maneuver the penalty to lean toward a pure ridge regression ($\alpha$ = 0), or a pure lasso ($\alpha$ = 1). 
-6. The last thing we need to pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed 'userId', and the length of each $\|\vec\beta_j\|$ is 19, which is the total number of genres we have. 
+6. The last thing we need to pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed 'userId', and the length of each $\|\vec\beta_j\|$ is 20, which is the total number of genres we have. 
 
 After we clarified the data structure, then we will proceed to the calculations in below. One thing to note that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows machine. 
 
@@ -544,9 +523,6 @@ m_id_dt <- data.table(movieId = m_id)
 rtable <- rtable_tr[m_id_dt, on = .(movieId)]
 
 rm(rtable_tr, movieId, m_id_dt)
-```
-
-```{r eval = FALSE}
 
 #turn the previous made movie x user table into a sparse matrix
 rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
@@ -560,9 +536,6 @@ gen_x <- t(gen_x)
 #break the big rating matrix into user batches with size of 1000
 set.seed(3, sample.kind = "Rounding")
 ind_y<- createFolds(1: rtable_y@Dim[2], k = ceiling(rtable_y@Dim[2]/1000))
-```
-
-```{r eval = FALSE}
 
 k <- length(ind_y)
 
@@ -590,9 +563,9 @@ u_beta <- unlist(u_beta)
 
 ```{r}
 
-#each u_beta$"userId" is a 20x1 vector for the userId = k
+#each u_beta$"userId" is a 21x1 vector for the userId = k
 #1st element named interception is \beta_0
-#the 2nd to 20th elements named as V1 - V19 is the vector \beta_u
+#the 2nd to 21th elements named as V1 - V20 is the vector \beta_u
 
 u_beta$"1"
 ```
@@ -769,7 +742,7 @@ Lr_tune <- foreach(L_rate = Lrts, .combine = "c") %dopar% {
 qplot(x = Lrts, y = Lr_tune, geom = c("point", "line"))
 ```
 
-This time the learning rate tuning rmse plot does not have a turning point, so instead we can locate the best rate by their slopes, when the tuning rmse slopes get smaller, the improvement by the next learning rate fade. Then we can define the first learning rate, whose slope drops under certain level, to be our choice of optimal learning rate. 
+This time the learning-rate tuning rmse plot does not have a turning point, so instead we can locate the best rate by their slopes, when the tuning rmse slopes get smaller, the improvement by the next learning rate fades. Then we can define the first learning rate, whose slope drops under certain level (we choose slope < 0.1 in here), to be our choice of optimal learning rate. 
 ```{r eval = FALSE}
 
 lr_slope <- sapply(1:(length(Lr_tune) - 1), function(k){
@@ -781,52 +754,43 @@ L_rate_opt <- Lrts[which(lr_slope < 0.1)][1]
 
 rm(Lrts, Lr_tune, lr_slope)#can be kept for plotting
 ```
-
 ```{r echo = FALSE}
 qplot(x = Lrts[-length(Lrts)], y = lr_slope, geom = c("point","line"))
 ```
 
-We will use the the full GD method instead of SGD to find the best $\lambda$, so there is one challenge in computation cost. Since $\lambda$ decides how close our learning result can be to the real minimum point, we want to granulate our increment in the try on sequence. On top of that, we also use the full gradient descent (GD) method instead of SGD to tune the $lambda$ to mimic our final learning computation process. So granular increment try on sequence plus the full size GD together just instantly increase the computation steps exponentially. So to overcome the slow loop obstacle in R, we are using the 'RcppArmadillo' package to write the gradient descent loop in C++, and source the C++ code back to R as a function. We name this C++ sourced function as 'gdtune()' in below code, the C++ code can be found in Appendix at the very end of this report. The manual to use the C++ code can be found on the 'Rcpp' package cran page. 
+We will use the the full GD method instead of SGD to find the best $\lambda$, so there is one challenge in computation cost. Since $\lambda$ decides how close our learning result can be to the real minimum point, for the best result, we use the full gradient descent (GD) method instead of SGD to tune the $lambda$ to mimic our final learning computation process. But the full size training data is too big, so the computation cost is very high, in addition, the R is known for slow loop, therefore we are using the 'RcppArmadillo' package to write the gradient descent loop in C++, and source the C++ code back to R as a function. This C++ function is named as 'gdtune()' in below code chunk, the C++ code can be found in Appendix at the very end of this report. The manual to use the C++ code can be found on the 'Rcpp' package cran page. 
 ```{r eval = FALSE}
-####lambda
-rm(lambda)
 
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f_opt*rtable_gen@Dim[1], 0, 1), nrow = f_opt)
 set.seed(4, sample.kind = "Rounding")
 Q <- matrix(runif(f_opt*rtable_gen@Dim[2], 0, 1), nrow = f_opt)
 
-lmds <- c(seq(0.01, 0.1, length.out = 5),
-          seq(0.1, 1, length.out = 5),
-          1:5)
+lmds <- seq(0.01, 0.1, length.out = 10)
 
 lmd_tune <- sapply(lmds, function(lmd){
-  gdtune(P = P, Q = Q, ytr = train_R, ytst = test_R,
-         Uitr = Ui_tr, Mjtr = Mj_tr, Uitst = Ui_tst, Mjtst = Mj_tst,
+  gdtune(P = P, Q = Q, ytr = train_R, ytst = test_R, 
+         Uitr = Ui_tr, Mjtr = Mj_tr, Uitst = Ui_tst, Mjtst = Mj_tst, 
          L_rate = L_rate_opt, lambda = lmd, epochs = 5)
-  }) 
-#this C++ loop only returns the 'sum of error^2' for each lambda value
-```
+  })
 
-```{r eval = FALSE}
-#use the sum of error^2 to produce rmse results
 lmd_tune <- sqrt(lmd_tune / length(test_R))
 ```
-
-we can visualise the minimum point in the valley of the $\lambda$ tuning RMSE curve.
 ```{r echo = FALSE}
 qplot(x = lmds, y = lmd_tune, geom = c("point", "line"))
 ```
-
 ```{r eval = FALSE}
+#take the the lowest point in the valley to be our lambda choice
 lmd_opt <- lmds[which.min(lmd_tune)]
 
-rm(P, Q, lmds, lmd_tune)##can be kept for plotting
+rm(P, Q, lmds, lmd_tune)#save for plot
 ```
 
-Up to now, we have tuned all the important hyperparameters to be ready to give us an expected good result. Rigorously speaking, we have not done all the parameters yet, that is because our training dataset size allow us to risk the epochs (iteration steps) number by guessing. The industrial practice may require the epochs to be tuned as well, because too large epochs may cause the model to be over trained, over training will also increase prediction error like overfitting [@nielsen_2015]. This final piece of code to put all the tuned hyperparameters together is also written in C++, and sourced as function gd(), the C++ code is put in Appendix at very end of report.
+Up to now, we have tuned all the important hyperparameters to be ready to give us an expected good result. Rigorously speaking, we have not done all the parameters yet, that is because our training dataset size allowing us to risk the epochs (iteration steps) number by guessing. The industrial practice may require the epochs to be tuned as well, because too large epochs may cause the model to be over trained, over training will also increase prediction error like overfitting [@nielsen_2015]. 
+
+This final piece of code to put all the tuned hyperparameters together is also written in C++, and sourced as function gd(), the C++ code is put in Appendix at very end of report.
 ```{r eval = FALSE}
-#the user matrix P, and movie matrix Q are generated inside the gd() function
+#the user matrix P, and movie matrix Q are generated inside the 'gd()' function
 #the seed for C++ sourced function need to be set in R
 #loop the model for 50 epochs
 set.seed(5, sample.kind = "Rounding")
@@ -836,7 +800,7 @@ pq <- gd(U_i = U_i, M_j = M_j, y = R,
          lambda = lmd_opt, epochs = 50)
 ```
 
-The gd() function returns a list we named as **pq**, that contains trained user matrix P with each column representing an 'userId', and movie matrix Q with each column representing a 'movieId'. We can use the code below to check any 'nan' value in them, the 'nan' is the result of training explosion, which means either the learning rate or the $\lambda$ is too big, then we need to retune them. 
+The 'gd()' function returns a list we named as **pq**, that contains trained user matrix P with each column representing an 'userId', and movie matrix Q with each column representing a 'movieId'. We can use the code below to check any 'nan' value in them, the 'nan' is the result of training explosion, which means either the learning rate or the $\lambda$ is too big, then we need to retune them. 
 ```{r}
 sum(is.nan(pq$P))
 sum(is.nan(pq$Q))
@@ -887,7 +851,7 @@ We now use the prediction error from above calculation to get the \textcolor{blu
 sqrt(mean(pred$err * pred$err))
 ```
 
-The goal of prediction \textcolor{blue}{**RMSE:0.8081552**} $<$ \textcolor{red}{0.86490} is reached. 
+The goal of prediction \textcolor{blue}{**RMSE:0.8053019**} $<$ \textcolor{red}{0.86490} is reached. 
 
 ## Conclusion
 To summarise what we have done to reach our RMSE goal, the whole process is broken into 4 big parts: data exploration, problem identification, model construction, and code implementation. In the data exploration, we get a picture of the dataset, then we simplified the multi attributes rating into a user-movie rating matrix, so by inspiration of the "Latent Factor" algorithm of @Koren2009, our goal becomes a matrix factorisation problem on a mathematical ground. Around this concept, we further break down those attributes into user factors and movie factors, and use them to build a model that is versatile enough to predict any user-movie paired rating. 
