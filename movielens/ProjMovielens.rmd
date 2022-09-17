@@ -6,11 +6,11 @@ output: pdf_document
 bibliography: references.bib
 ---
 ```{r include = FALSE}
-# these libraries are used
 library(tidyverse)
 library(data.table)
 library(doParallel)
 library(Matrix)
+load("rmd.RData")
 ```
 ```{r eval = FALSE}
 #libraries are used in this report
@@ -32,7 +32,7 @@ This project is inspired by the $1 million prize competition hosted by Netflix i
 In the following sessions, we will look into the dataset first to have a macro view, then we will explain details of the methods to achieve the final goal. 
 
 ## Data exploration
-First of all, we use the following code to download and prepare the data we need. The code in below is provided by edx-HarvardX PH125.9x teaching team. To successfully obtain the `edx` and `validation` dataset, we need to follow the instructions inside the code chunk below accordingly, with respect to our own computer setup.  
+First of all, we use the following code to download and prepare the data we need. The code in below is provided by edx-HarvardX PH125.9x teaching team. To successfully obtain the "edx" and "validation" dataset, we need to follow the instructions inside the code chunk below accordingly, with respect to our own computer setup.  
 
 ```{r eval=FALSE}
 ##########################################################
@@ -100,7 +100,7 @@ edx <- rbind(edx, removed)
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
 ```
 
-We will use the `edx` data to develop and train our model, then apply the trained model on the `validation` data to predict the rating with respect to the user/movie pairs, and evaluate the prediction against the real ratings by the **RMSE** method. So let's look at the macro structure of the dataset first. 
+We will use the "edx" data to develop and train our model, then apply the trained model on the "validation" data to predict the rating with respect to the user/movie pairs, and evaluate the prediction against the real ratings by the **RMSE** method. So let's look at the macro structure of the dataset first. 
 
 Here is the macro view of `edx` dateset:
 ```{r echo = FALSE}
@@ -109,14 +109,14 @@ knitr::kable(edx_temp)
 rm(edx_temp)
 ```
 
-Here is the macro view of `validation` dataset:
+Here is the macro view of "validation" dataset:
 ```{r echo = FALSE}
 val_temp <- head(validation)
 knitr::kable(val_temp)
 rm(val_temp)
 ```
 
-Comparing the `edx` and `validation` dataset, we can tell the `edx` has the size of 9,000,055 × 6, is just a longer version of `validation` with the size of 999,999 × 6.
+Comparing the "edx" and "validation" dataset, we can tell the "edx" has the size of 9,000,055 × 6, is just a longer version of "validation" with the size of 999,999 × 6.
 ```{r echo = FALSE}
 df_count <-data.frame(set = c("edx", "validation"),
                       size = c(length(edx$rating),
@@ -129,18 +129,18 @@ ggplot(df_count, aes(set, y = log(dataset_length))) +
 rm(df_count)
 ```
 
-When we look into the details of 'edx' dataset, we have:
+When we look into the details of "edx" dataset, we have:
 ```{r echo = FALSE}
-options{width = 75}
+options(width = 75)
 
 names(edx)
 ```
 
 In these 6 headers, we can classify them into three groups: user info, movie info, and rating (the joint info). 
 
-For user info, we have 'userId', 'timestamp'. This 'timestamp' is showing the information about when the movie is rated by the user, and in the Unix Epoch Time format [@Harper2016]. 
+For user info, we have "userId", "timestamp". This "timestamp" is showing the information about when the movie is rated by the user, and in the Unix Epoch Time format [@Harper2016]. 
 
-For movie info, we have 'movieId', 'title', and 'genres'. One thing need to pay attention is that, one movie can be categarised as multiple 'genres'. 
+For movie info, we have "movieId", "title", and "genres". One thing need to pay attention is that, one movie can be categarised as multiple 'genres'. 
 
 let's look at one example to have a more straight understanding. 
 ```{r}
@@ -153,14 +153,14 @@ knitr::kable(sample)
 rm(sample)
 ```
 
-We can tell this user by 'userId' = 1 rated the movie "The Lion King" with 'movieId' = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised under Adventure|Animation|Children|Drama|Musical. 
+We can tell this user by "userId" = 1 rated the movie "The Lion King" with "movieId" = 364 for 5 stars, on the date 1996-08-02. The movie "Lion King" was released in 1994, and the movie is categorised under Adventure|Animation|Children|Drama|Musical. 
 
-So our job is to use these user and movie info to predict the 'rating', and the 'rating' is ranged between:
+So our job is to use these user and movie info to predict the "rating", and the "rating" is ranged between:
 ```{r}
 range(edx$rating)
 ```
 
-We see the range is starting from 0.5, but implicitly the floor of the rating range is **0**. Why does this implicit **0** rating assumption may stand? Let us look at number of user/movie paired ratings we have in 'edx':
+We see the range is starting from 0.5, but implicitly the floor of the rating range is **0**. Why does this implicit **0** rating assumption may stand? Let us look at number of user/movie paired ratings we have in "edx":
 ```{r echo = FALSE}
 df_sparse <- data.table(x = c("user_num", "movie_num", "rating_num"),
           y = c(uniqueN(edx$userId), 
@@ -178,7 +178,7 @@ uniqueN(edx$userId) * uniqueN(edx$movieId)
 ```
 this number of total ratings, but instead we only got 9,000,055 in our dataset. Of course, this is very reasonable, since it is not possible for everyone watched all the movies, and it is also possible for one has watched the movie, but did not rate it. In other word, we can view this as a big matrix with the dimension of user_num: 69878 * movie_num: 10677, however this matrix is highly sparse with only rating_num: 9,000,055 non zero elements, and the reset are all zero. Mathematically, we call this kind of matrix a \textcolor{blue}{"sparse matrix"}. 
 
-From the code snippet at very beginning helped us get the 'edx' and 'validation' datasets, we can tell the 'validation' data is intentionally built based on users and movies of 'edx', which we will use for our algorithm development.
+From the code snippet at very beginning helped us get the "edx" and "validation" datasets, we can tell the "validation" data is intentionally built based on users and movies of "edx", which we will use for our algorithm development.
 ```{r eval = FALSE}
 # it makes userId and movieId in validation set are also in edx set
 validation <- temp %>% 
@@ -186,7 +186,7 @@ validation <- temp %>%
       semi_join(edx, by = "userId")
 ```
 
-That 'userId' and 'movieId' matching process makes the rating matrix of 'validation' be exactly the same as 'edx', so we can further specify our job to be predicting the 'rating' at the corresponding 'userId'-'movieId' position in the big \textcolor{blue}{sparse matrix}, based on the known elements are given by 'edx' dataset. Then it becomes to estimate an element value inside a sparse matrix problem.
+That "userId" and "movieId" matching process makes the rating matrix of "validation" be exactly the same as "edx", so we can further specify our job to be predicting the "rating" at the corresponding "userId"-"movieId" position in the big \textcolor{blue}{sparse matrix}, based on the known elements are given by "edx" dataset. Then it becomes to estimate an element value inside a sparse matrix problem.
 
 After we identified our problem mathematically, one of the most popular algorithm to solve this problem is \textcolor{blue}{Latent Factor method} by @Koren2009. so we will imitate this $1 million algorithm, but in a rather simple way with an extra step of searching user's genres info, which is not included in the dataset. 
 
@@ -201,13 +201,15 @@ $$
 A = U\Sigma V^{T}
 $$
 In the above SVD formula, assume A is a m(rows) by n(cols) matrix, where U is a m(rows) by m(cols) square matrix composed by singular vectors in A's column space $R^{m}$, which captures the feature information of the rows. The V is a n(rows) by n(cols) square matrix composed by singular vectors in A's row space $R^{n}$, which captures the feature information of the columns. Lastly, the $\Sigma$ is a m(rows) by n(cols) diagonal matrix contains f number of singular values of A with the reset min(m,n) - f are all 0's, where f $\leq$ min(m, n). Here is an example of m = 5, f = 3, n = 4 to demonstrate the $\Sigma$:
-$$\Sigma = \begin{bmatrix}\sigma_1 & 0 & 0 & 0\\
+$$
+\Sigma = \begin{bmatrix}\sigma_1 & 0 & 0 & 0\\
 0 & \sigma_2 & 0 & 0\\
 0 & 0 & \sigma_3 & 0\\
 0 & 0 & 0 & 0\\
 0 & 0 & 0 & 0\\
-\end{bmatrix}$$
-This number f is critical to us, since it defines how many critical factors is contained in A. We also mentioned before the PCA, this slim version SVD, can help us reduce rank of A without compromising critical information according to the Eckart-Young theorem [@Strang2019]. So we can use this f, or k$\leq$f more specifically, to shrink the U and V into m by k, and n by k matrix respectively, and this will still enable us to recover a good estimation of A with a smaller U, V through the matrix multiplication. Here we only abstract the key information of SVD and PCA to help us build the foundation of our algorithm, for further details on the topic, this book @Strang2016 will give a comprehensive explanation. 
+\end{bmatrix}
+$$
+This number f is critical to us, since it defines how many critical factors is contained in A. We also mentioned before the PCA, this slim version SVD, can help us reduce rank of A without compromising critical information according to the Eckart-Young theorem [@Strang2019]. So we can use this f, or k $\leq$ f more specifically, to shrink the U and V into m by k, and n by k matrix respectively, and this will still enable us to recover a good estimation of A with a smaller U, V through the matrix multiplication. Here we only abstract the key information of SVD and PCA to help us build the foundation of our algorithm, for further details on the topic, this book @Strang2016 will give a comprehensive explanation. 
 
 Now let's apply the standard SVD formula into our scenario, and rewrite it as:
 $$
@@ -223,12 +225,12 @@ R_{lfm} = P^{T} Q
 $$
 Where P is a factor_num by user_num matrix, and Q is a factor_num by movie_num matrix, so $R_{lfm}$ is a user_num by movie_num matrix, and for notation convenient, we will use R to indicate $R_{lfm}$ in reset of the report.
 
-By inspecting the R matrix equation, to be successfully making the estimation on any R element $r_{ui}$, we need the corresponding $\vec{p_u}$ and $\vec{q_i}$. So how can we get this latent factor vector for each user and movie? @Bell2007 solved it by the idea of minimising the loss function ${\frac{1}{2}\|P^{T} Q - R\|_F^2}$ with the alternating gradient descent, and the alternating iterations here beautifully solved the problem of both P and Q are unknown to us at beginning, the iteration will be like this:
-$$\begin{equation*}
+By inspecting the R matrix equation, to be successfully making the estimation on any R element $r_{ui}$, we need the corresponding $\vec{p_u}$ and $\vec{q_i}$. So how can we get this latent factor vector for each user and movie? @Bell2007 solved it by the idea of minimising the loss function $\frac{1}{2}\|P^{T} Q - R\|_F^2$ with the alternating gradient descent, and the alternating iterations here beautifully solved the problem of both P and Q are unknown to us at beginning, the iteration will be like this:
+$$
 P_{t+1} = P_t - \underbrace{Q_t\cdot(P_t^{T}Q_t - R)^{T}}_{\nabla P_t}\\
 Q_{t+1} = Q_t - \underbrace{P_t\cdot(P_t^{T}Q_t - R)}_{\nabla Q_t}
-\end{equation*}$$
-The above alternations are not efficient with our sparse matrix scenario though, we just use them as a demonstration, and we will tweak them to fit our purpose later, when we get into the details of our calculation. For more details on gradient descent and why it works, this book @Strang2019 covers all the essentials. Only to have a intuitive understanding about gradient descent, geometrically we are having a convex loss function, because ${\frac{1}{2}\|P^{T} Q - R\|_F^2}$ $\geq$ 0 is positive semidefinite, ideally a rather simple case is loss this function > 0 a positive definite matrix, then it is a bowl opening up, the bottom point of the bowl is the minimum of the loss function we are working hardly to achieve. On the other hand, by achieving this bottom point, we also minimise our target RMSE function:
+$$
+The above alternations are not efficient with our sparse matrix scenario though, we just use them as a demonstration, and we will tweak them to fit our purpose later, when we get into the details of our calculation. For more details on gradient descent and why it works, this book @Strang2019 covers all the essentials. Only to have a intuitive understanding about gradient descent, geometrically we are having a convex loss function, because $\frac{1}{2}\|P^{T} Q - R\|_F^2$ $\geq$ 0 is positive semidefinite, ideally a rather simple case is loss this function > 0 a positive definite matrix, then it is a bowl opening up, the bottom point of the bowl is the minimum of the loss function we are working hardly to achieve. On the other hand, by achieving this bottom point, we also minimise our target RMSE function:
 $$
 RMSE_{matrix} = \|P^{T}Q - R\|_F
 $$
@@ -247,7 +249,7 @@ r_{u1} & \ldots & r_{ui}
 \end{bmatrix} = \begin{bmatrix} \vec{Movie_1} & \vec{Movie_2} & \ldots & \vec{Movie_i}\end{bmatrix}
 $$
 So in our rating matrix, we have to centralise in both row and column directions simultaneously. To stress the simultaneous centralisation, we are not performing the de-mean on one direction then the other, instead we treat the rating $r_{ui}$ to be in its own r-th dimension, because $r_{ui}$ is the result of some function $f(\vec{user_u}, \vec{movie_i})$. One more thing to consider is the sparsity of our rating matrix, there are very few $r_{ui}$ are known to us, and we don't know whether the user watched the movie, or she just could not be bothered to rate it. So instead impute the missing value places of the matrix with 0's, we just exclude them from our computation. The other reason of doing so is, we will get a 0 mean, because those 0's adding no value to the sum of all ratings, but making our divisor enormously large. 
-```{r eval = FALSE}
+```{r}
 #global mean
 g_mean <- mean(edx$rating)
 ```
@@ -261,7 +263,7 @@ Loss = \frac{1}{2N} \sum_{ui \in N}(\hat{r}_{ui} - r_{ui})^2
 $$
 we are aiming for the best u_bias so that RMSE can be minimised with the set up of $\hat{r_{ui}} = g\_mean + u\_bias$. 
 
-And what's more, there are active users who rates every movie she watched, and lazy users who rarely rate, so we introduce the regularisation factor ${\lambda}$ to avoid the overfitting risk, so the new regularised loss function becomes to be:
+And what's more, there are active users who rates every movie she watched, and lazy users who rarely rate, so we introduce the regularisation factor $\lambda$ to avoid the overfitting risk, so the new regularised loss function becomes to be:
 $$
 Loss = \frac{1}{2} \sum_{i \in N}(\hat{r}_{ui} - r_{ui})^2 + \frac{\lambda}{2N} \sum_{i \in N}b_u^2
 $$
@@ -409,9 +411,9 @@ We use the beginning example to remind ourselves that, the 'genres' information 
 edx[9,]$genres
 ```
 
-One movie has multiple genres, but we can not quantify which genre is dominant. This multi-genres attribute is also applicable to users, like the same example we just used, we can not tell the user $1$ rated "The Lion King" $5$ star is because she likes the the adventure genre, the animation genre, or the musical genre of the movie, we don't know what her dominant genre taste is. And it is also possible like the movie, she likes all the 5 genres in the movie, but out of those 5 she might have stronger preference on musical genre over the rest. 
+One movie has multiple genres, but we can not quantify which genre is dominant. This multi-genres attribute is also applicable to users, like the same example we just used, we can not tell the user "1" rated "The Lion King" "5" star is because she likes the the adventure genre, the animation genre, or the musical genre of the movie, we don't know what her dominant genre taste is. And it is also possible like the movie, she likes all the 5 genres in the movie, but out of these genres she might have stronger preference on musical genre over the rest. 
 
-Now we have enough reason to not only take the user genre $\vec{g_u}$ as a vector, but also treat the movie genre as a vector $\vec{g_m}$ too. So to combine them together, we assume there is a genre bias $b_g = \vec{g_m} \cdot \vec{g_u}$. Next let's find the $\vec{g_m}$ for each movie, then use those movie $\vec{g_m}$ to find $\vec{g_u}$ for each user, after all we can use them to construct the $b_g$ in regard to different 'userId'-'movieId' pairs in our prediction. 
+Now we have enough reason to not only take the user genre $\vec{g_u}$ as a vector, but also treat the movie genre as a vector $\vec{g_m}$ too. So to combine them together, we assume there is a genre bias $b_g = \vec{g_m} \cdot \vec{g_u}$. Next let's find the $\vec{g_m}$ for each movie, then use those movie $\vec{g_m}$ to find $\vec{g_u}$ for each user, after all we can use them to construct the $b_g$ in regard to different "userId"-"movieId" pairs in our prediction. 
 
 Since we are given the genres of movie already, so we will start with constructing each movie's genre vector $\vec{g_m}$ first. Let's begin with some data cleaning on the genres column to remove the "|". 
 ```{r eval = FALSE}
@@ -457,14 +459,16 @@ m_gen <- foreach(i = 1:m_n, .packages = c("stringr", "data.table")) %dopar% {
 names(m_gen) <- m_id
 ```
 
-The next code chunk may be a bit confusing at beginning, what it does is to create a data frame that contains all the movie's genres means. We can see from the ""The Lion King" example, the movie column has it's categorised genres rows filled with that genre's mean just calculated in above, and the rest genres rows are zero. 
+The next code chunk may be a bit confusing at beginning, what it does is to create a data frame that contains all the movie's genres means. We can see from the "The Lion King" example, the movie column has it's categorised genres rows filled with that genre's mean just calculated in above, and the rest genres rows are zero. 
 ```{r echo = FALSE}
 knitr::kable(edx[9, .(movieId, title, genres)])
 ```
+
 ```{r echo = FALSE}
 #to get this to work, run the next code chunk first
 gen[, c("gen_cat","364")][1:10,]
 ```
+
 ```{r eval = FALSE}
 
 ind <- foreach(g = 1:m_n, .packages = "foreach") %dopar% {
@@ -501,17 +505,17 @@ This loss function may look a bit scary at first glance, but indeed it is just a
 
 Because of this lasso-ridge hybrid structure, makes it to be specially useful in feature selection under a sparse situation [@Friedman2009]. That property is just a perfect fit in our scenario, we have a sparse rating matrix, we want to fit the data with the selected genres features to construct a $\vec{g_u}$ for each user. We can easily implement this method by the 'glmnet' package. 
 
-To use the 'glmnet' we need to make some clarifications in the above formula in our purpose:
-1. the $y_{ui}$ is the rating element in a 'movieId'$\times$'userId' rating matrix, which is just a transpose of R we used in above. 
-2. $\vec{x}_m^{T}$ is a row vector with its elements are all 20 genres (including the "no genres listed": empty genres for that movie) we have in the dataset, but with only that categorised genres of the movie filled with the respective genres means, and reset genres slots are all zero. 
-3. $\beta_0$ and $\vec\beta_u$ is a set of value to be returned by the fitting, they are in together to represent one single user's genres structure. We used the word structure to stress that, the $\vec{\beta}_u$ has the same length as $\vec{x}_m$, we also assume the user's genres preferences can be categorised in a mixture of these 20 genres we have. And the $\beta_0$ here is to be treated as a central point of all the genres to a user. 
-4. The $\lambda$ is acting as the traditional penalty coefficient to prevent overfitting. The nice thing about using 'glmnet' package is that, it tunes the $\lambda$ by cross validation, and apply it in fitting result. 
-5. $\alpha$ is a weighting factor to provide the flexibility for us to maneuver the penalty to lean toward a pure ridge regression ($\alpha$ = 0), or a pure lasso ($\alpha$ = 1). 
-6. The last thing we need to pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed 'userId', and the length of each $\|\vec\beta_j\|$ is 20, which is the total number of genres we have. 
+To use the 'glmnet' we need to make some clarifications in the above formula in our purpose:  
+1. the $y_{ui}$ is the rating element in a "movieId"x"userId" rating matrix, which is just a transpose of R we used in above.  
+2. $\vec{x}_m^{T}$ is a row vector with its elements are all 20 genres (including the "no genres listed": empty genres for that movie) we have in the dataset, but with only that categorised genres of the movie filled with the respective genres means, and reset genres slots are all zero.  
+3. $\beta_0$ and $\vec\beta_u$ is a set of value to be returned by the fitting, they are in together to represent one single user's genres structure. We used the word structure to stress that, the $\vec{\beta}_u$ has the same length as $\vec{x}_m$, we also assume the user's genres preferences can be categorised in a mixture of these 20 genres we have. And the $\beta_0$ here is to be treated as a central point of all the genres to a user.  
+4. The $\lambda$ is acting as the traditional penalty coefficient to prevent overfitting. The nice thing about using 'glmnet' package is that, it tunes the $\lambda$ by cross validation, and apply it in fitting result.  
+5. $\alpha$ is a weighting factor to provide the flexibility for us to maneuver the penalty to lean toward a pure ridge regression ($\alpha$ = 0), or a pure lasso ($\alpha$ = 1).  
+6. The last thing we need to pay attention is the group lasso $\alpha \sum_{j \in N}\|\beta_j\|_2$, the N is total number of movies we have, the $\|\vec\beta_j\|_2$ is the $\iota_2$ norm for each user-movie paired rating with fixed "userId", and the length of each $\|\vec\beta_j\|$ is 20, which is the total number of genres we have. 
 
 After we clarified the data structure, then we will proceed to the calculations in below. One thing to note that, if you are about to run the code, be prepared it can take you about 20 hours, that is the amount of time I got on my windows machine. 
 
-The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a 'movieId'$\times$'userId' big table. 
+The next code chunk will give us a residual table with each non NA element is filled by $\bar{r_{g}} + b_u + b_m - r_{ui}$. We get the NA's in reset, because we are making a "movieId"x"userI" big table. 
 ```{r eval = FALSE}
 
 residual_train <- u_bias[m_bias[edx, on = .(movieId)]
@@ -598,12 +602,12 @@ $$
 \nabla_qL = err\cdot\vec{p}_t + \lambda\cdot\vec{q}_t\\
 err = \vec{p}_t\cdot\vec{q}_t - rsid_{ui}
 $$
-This set of formulas describe the whole calculation process, but in a reverse order, this way of ordering can more clearly explain themselves. To be success in computation, we need to tune these hyperparameters first:
-1. **f**: is the factor length for each $\vec{p}_u$ and $\vec{q}_i$, which we mentioned in the beginning of the "Foundation" subsection without solving it. We will tune it first to construct $\vec{p}_u$ and $\vec{q}_i$, so we can proceed.
-2. **lr**: is the learning rate, in some textbook it is also called step size, which will be more intuitive, since it controls how big the stride we are taking for each step in searching. There is a trade off, if the size is too big, not only we will never reach the minimum point of the bowl, but also the result can explode by keep climbing to the infinite maximum. But if we take too small stride each step, then it may take forever to reach the minimum point. So academically, researchers and practitioners are constantly searching and developing new ways of constructing this step size, someone calls it the art in machine learning. But we will only use the most brutal way to tune it by cross validation. 
+This set of formulas describe the whole calculation process, but in a reverse order, this way of ordering can more clearly explain themselves. To be success in computation, we need to tune these hyperparameters first:  
+1. **f**: is the factor length for each $\vec{p}_u$ and $\vec{q}_i$, which we mentioned in the beginning of the "Foundation" subsection without solving it. We will tune it first to construct $\vec{p}_u$ and $\vec{q}_i$, so we can proceed.  
+2. **lr**: is the learning rate, in some textbook it is also called step size, which will be more intuitive, since it controls how big the stride we are taking for each step in searching. There is a trade off, if the size is too big, not only we will never reach the minimum point of the bowl, but also the result can explode by keep climbing to the infinite maximum. But if we take too small stride each step, then it may take forever to reach the minimum point. So academically, researchers and practitioners are constantly searching and developing new ways of constructing this step size, someone calls it the art in machine learning. But we will only use the most brutal way to tune it by cross validation.  
 3. $\lambda$: is playing as a penalty coefficient to prevent from overfitting in loss function as usual, but it also decide how low we can reach down the bowl. If the **lr** controls the speed of searching/learning in general, then $\lambda$ controls the precision of learning. 
 
-Now we are ready to proceed to the calculation details. the following code will help us to get the $residual_{ui}$ for each user-movie paired ratings in 'edx' dataset.
+Now we are ready to proceed to the calculation details. the following code will help us to get the $residual_{ui}$ for each user-movie paired ratings in "edx" dataset.
 ```{r eval = FALSE}
 
 uid_train <- edx$userId %>% as.character()
@@ -810,23 +814,23 @@ pq <- gd(U_i = U_i, M_j = M_j, y = R,
          lambda = lmd_opt, epochs = 50)
 ```
 
-The 'gd()' function returns a list we named as **pq**, that contains trained user matrix P with each column representing an 'userId', and movie matrix Q with each column representing a 'movieId'. We can use the code below to check any 'nan' value in them, the 'nan' is the result of training explosion, which means either the learning rate or the $\lambda$ is too big, then we need to retune them. 
+The 'gd()' function returns a list we named as **pq**, that contains trained user matrix P with each column representing an 'userId', and movie matrix Q with each column representing a "movieId". We can use the code below to check any "nan" value in them, the "nan" is the result of training explosion, which means either the learning rate or the $\lambda$ is too big, then we need to re-tune them. 
 ```{r}
 sum(is.nan(pq$P))
 sum(is.nan(pq$Q))
 ```
 
-We also apply the 'userId' order and 'movieId' order to the matrix P, Q, which was recorded before from the rsid matrix code part. Then matrix P, Q's column names can be called by 'userId' and 'movieId', which will be convenient in the final prediction composition. 
+We also apply the "userId" order and "movieId" order to the matrix P, Q, which was recorded before from the rsid matrix code part. Then matrix P, Q's column names can be called by "userId" and "movieId", which will be convenient in the final prediction composition. 
 ```{r eval = FALSE}
 colnames(pq$P) <- uid_gen$userId %>% as.character()
 colnames(pq$Q) <- mid_gen
 ```
 
 By the end of this session, we have got all the elements in our prediction model 
-$\hat{r}_{ui} = \bar{r}_g + b_u + b_m + b_g + lf_{ui}$, where both $b_g$ and $lf_{ui}$ have to be composed according to the predicted rating's 'userId' and 'movieId'.
+$\hat{r}_{ui} = \bar{r}_g + b_u + b_m + b_g + lf_{ui}$, where both $b_g$ and $lf_{ui}$ have to be composed according to the predicted rating's "userId" and "movieId".
 
 ## Final Result
-As described in above, to make a prediction, we have to know the rating of the 'movieId' is given by which 'userId', then we can composite the $b_g$ and $lf_{ui}$ accordingly, and put these 'userId' and 'movieId' specified elements into prediction model. We will use the 'userId' and 'movieId' from each rating in the 'validation' dataset, to call the respective element vectors in the following prediciton composition code chunk. 
+As described in above, to make a prediction, we have to know the rating of the "movieId" is given by which "userId", then we can composite the $b_g$ and $lf_{ui}$ accordingly, and put these "userId" and "movieId" specified elements into prediction model. We will use the "userId" and "movieId" from each rating in the "validation" dataset, to call the respective element vectors in the following prediction composition code chunk. 
 ```{r eval = FALSE}
 
 #get the 'userId' and 'movieId' from validation dataset
@@ -864,7 +868,7 @@ sqrt(mean(pred$err * pred$err))
 The goal of prediction \textcolor{blue}{**RMSE:0.8053019**} $<$ \textcolor{red}{0.86490} is reached. 
 
 ## Conclusion
-To summarise what we have done to reach our RMSE goal, the whole process is broken into 4 big parts: data exploration, problem identification, model construction, and code implementation. In the data exploration, we get a picture of the dataset, then we simplified the multi attributes rating into a user-movie rating matrix, so by inspiration of the "Latent Factor" algorithm of @Koren2009, our goal becomes a matrix factorisation problem on a mathematical ground. Around this concept, we further break down those attributes into user factors and movie factors, and use them to build a model that is versatile enough to predict any user-movie paired rating. 
+To summarise what we have done to reach our RMSE goal, the whole process is broken into 4 big parts: data exploration, problem identification, model construction, and code implementation. In the data exploration, we get a picture of the dataset, then we simplified the multi-attributes rating into a user-movie rating matrix, so by inspiration of the "Latent Factor" algorithm of @Koren2009, our goal becomes a matrix factorisation problem on a mathematical ground. Around this concept, we further break down those attributes into user factors and movie factors, and use them to build a model that is versatile enough to predict any user-movie paired rating. 
 
 Beside the "Latent Factor" as the core in our algorithm, we employed an "Elastic Net" with the movie genres to derive genres vector for each user. Although we can use "Latent Factor" directly on the ratings without exploiting the hidden user genres info, but this extra approach is believed not only can improve the "Latent Factor" learning speed afterward, but also can improve a recommendation system accuracy with more user attributes data, such as movie search histories, and if this recommendation system is used in Amazon Prime Video, then we will have much richer user info connected with their shopping behaviour, then this user genres info can be used for classifying them into different groups, then we could have a group bias, which can reduce computation cost, for new customers we can provide a better service to meet their broad tastes without throwing darts blindly. We have to bare in mind that, the real world data is much larger and complicated, so reduce computation cost can improve data efficiency to companies, as well as customer experiences. 
 
@@ -893,7 +897,7 @@ rmse_tbltmp <- data.table(
 knitr::kable(rmse_tbltmp)
 rm(prederr_tbl, rmse_tbl, rmse_tbltmp)
 ```
-\textcolor{red}{* "g_mean + u_bias + m_bias + gen_bias + latent_factor" is for demonstration only, the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", please refer the code chunk in above for explanations.}  
+\textcolor{red}{*} "g_mean + u_bias + m_bias + gen_bias + latent_factor" is for demonstration only, the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", refer the code chunk in above for explanations.  
 
 ## Refnereces
 
