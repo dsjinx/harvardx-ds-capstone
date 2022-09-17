@@ -583,18 +583,14 @@ u_beta$"1"
 Up to now, we have done data centralisation, and used the movie genres mean to derive the user genres, which can be used to construct $b_g = \vec{g}_m \cdot \vec{\beta}_u + \beta_{0u}$, so for each pair of 'userId' and 'movieId', we can make a very rough prediction based on $\hat{r}_{ui} \sim \bar{r}_g + b_u + b_i + b_g$. This subsection will get us the last element $lf_{ui}$ to complete our model $\hat{r}_{ui} \sim \bar{r}_g + b_u + b_i + b_{gui} + lf_{ui}$. 
 
 At the very beginning of this secession, we have had a mathematical justification for this model about why it can help us achieve the result we want. We now can construct a model to serve our purpose on that mathematical ground. 
-$$
-Loss = \frac{1}{2}(\vec{p}_u\cdot\vec{q}_i - rsid_{ui})^2 + \lambda(\|\vec{p}_u\|_2 + \|\vec{q}_i\|_2)\\
-rsid_{ui} = \bar{r}_g + b_u + b_i + b_g - r_{ui} 
-$$
+$$Loss = \frac{1}{2}(\vec{p}_u\cdot\vec{q}_i - rsid_{ui})^2 + \lambda(\|\vec{p}_u\|_2 + \|\vec{q}_i\|_2)$$
+$$rsid_{ui} = \bar{r}_g + b_u + b_i + b_g - r_{ui}$$
 We will derive the best $\vec{p}_u$ and $\vec{q}_i$ for each user and movie respectively, so that our loss function is minimised. To note that, instead of the R, P, Q matrix, we use the vectors and single rating element values in our loss function, this kind of set up will be more convenient for our sparse case. So the learning iterations are also in a vector form to fit our needs. 
-$$
-\vec{p}_{t+1} = \vec{p}_t - lr\cdot\nabla_pL\\
-\vec{q}_{t+1} = \vec{q}_t - lr\cdot\nabla_qL\\
-\nabla_pL = err\cdot\vec{q}_t + \lambda\cdot\vec{p}_t\\
-\nabla_qL = err\cdot\vec{p}_t + \lambda\cdot\vec{q}_t\\
-err = \vec{p}_t\cdot\vec{q}_t - rsid_{ui}
-$$
+$$\vec{p}_{t+1} = \vec{p}_t - lr\cdot\nabla_pL\\$$
+$$\vec{q}_{t+1} = \vec{q}_t - lr\cdot\nabla_qL\\$$
+$$\nabla_pL = err\cdot\vec{q}_t + \lambda\cdot\vec{p}_t\\$$
+$$\nabla_qL = err\cdot\vec{p}_t + \lambda\cdot\vec{q}_t\\$$
+$$err = \vec{p}_t\cdot\vec{q}_t - rsid_{ui}\\$$
 This set formulas describe the whole calculation process, but in a reverse order. This way of ordering can more clearly explain themselves. To be success in computation, we also need to tune some hyperparameters first:  
 1. **f**: is the factor length for each $\vec{p}_u$ and $\vec{q}_i$, which we mentioned in the beginning of the "Theoretical Foundations" subsection without a solution. We will tune it first to construct $\vec{p}_u$ and $\vec{q}_i$, so that we can proceed.  
 2. **lr**: is the learning rate, in some textbook it is also called step size, which will be more intuitive, since it controls how big the stride we are taking for each step in searching. There is a trade off, if the size is too big, not only we will never reach the minimum point of the bowl, but also the result can explode by keep climbing to the infinite maximum. But if we take too small stride each step, then it may take forever to reach the minimum point. So academically, researchers and practitioners are constantly searching and developing new ways of constructing this step size, someone calls it the art in machine learning. But we will only use the most brutal way to tune it by cross validation.  
@@ -853,7 +849,9 @@ pred <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
     , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - f_gd,
            err = pred - rating)]
 ```
-\textcolor{red}{*}the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", because we trained them from the residuals of $b_{gui} \sim \bar r_g + b_u + b_m - r_{ui} \to r_{ui} \sim \bar r_g + b_u + b_m - b_{gui}$ and $lf_{ui} \sim \bar r_g + b_u + b_m - b_{gui}- r_{ui} \to r_{ui} \sim \bar r_g + b_u + b_m - b_{gui} - lf_{ui}$.  
+\textcolor{red}{*}the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", because we trained them from the residuals of 
+$$b_{gui} \sim \bar r_g + b_u + b_m - r_{ui} \to r_{ui} \sim \bar r_g + b_u + b_m - b_{gui}$$ 
+$$lf_{ui} \sim \bar r_g + b_u + b_m - b_{gui}- r_{ui} \to r_{ui} \sim \bar r_g + b_u + b_m - b_{gui} - lf_{ui}$$.  
 
 We now use the prediction error from above calculation to get the \textcolor{blue}{**Final RMSE**}:
 ```{r}
