@@ -191,7 +191,7 @@ After we identified our problem mathematically, one of the most popular algorith
 ## Methods Details
 Before we get into the details of our algorithm, we will build some basic theoretical understanding on it first. 
 
-###Theoretical Foundations
+### Theoretical Foundations
 The central idea of our algorithm, as well as the one by @Koren2009, is matrix factorisation. More specifically, it is the idea of PCA or SVD in linear algebra, but on the opposite way. As described by @Bell2007, PCA is the idea of rank minimisation for a dense matrix with no missing entry, but our user-movie rating matrix is highly sparse with most entries are missing, so we are going the opposite way of rank reduction, indeed we are estimating the rank up from zero. To justify our approach, let's break it into two parts: 1, rating matrix factorisation; 2, factor search. 
 
 Because PCA is just a slim version of SVD in theory, let's build some foundation on SVD first. @Strang2016 tells us any matrix can be factorised by SVD, even the rank 1 matrix: 
@@ -233,7 +233,7 @@ RMSE_{matrix} = \|P^{T}Q - R\|_F
 $$
 up to now, we have built enough understanding to proceed with our algorithm, but we still miss one important part, the number of latent factors to construct each user and movie vector, we will leave it at the end inside the last step of the computation. With the above foundation, we are ready to get into the computations now. 
 
-###Centralisation
+### Centralisation
 Instead applying our latent factor algorithm directly, we need to centralise user-movie rating matrix first. Traditionally, we only centeralise the measurements vectors in SVD. In our rating matrix, there are tow kinds of measurements, users and movies. If we treat each user as a measurement, then each movie is a sample point, conversely, we treat each movie as a measurement, then each user is a sample point. 
 $$
 R = \begin{bmatrix} \vec{User_1}^{T}\\
@@ -395,7 +395,7 @@ rm(mb_tune, mb_rmse, lambdam_search, lambda_m, train_cv, test_cv)
 
 By now, we have finished the centralisation process under $\bar{r}_{ui} = \bar{r}_{g} + b_u + b_m$. We have to stress that the mean estimation $\bar{r}_{ui}$ varies on different user-movie combinations, so it can be generalised across all the elements of our Rating matrix, this value can always be generated if we have history on the specified user and movie. This generalisation property makes it to be versatile in prediction. 
 
-###Genres Bias
+### Genres Bias
 ```{r, echo = FALSE}
 
 knitr::kable(edx[9,])
@@ -538,7 +538,7 @@ rtable_y <- setnafill(rtable[,-1], type = "const", fill = 0)
 rtable_y <- as(as.matrix(rtable_y), "sparseMatrix")
 
 #turn the movie genres table in above into a sparse matrix
-#we use the result movie x genres mean matrix as the predictor in model
+#we use the result movie by genres mean matrix as the predictor in model
 gen_x <- as(as.matrix(gen[,-1]), "sparseMatrix")
 gen_x <- t(gen_x)
 
@@ -551,7 +551,7 @@ k <- length(ind_y)
 #an empty list container to be filled by the fitting results in next
 u_beta <- list()
 
-#\alpha = 0.5 to make the model to be a "Elastic Net"
+#alpha = 0.5 to make the model to be a standard "Elastic Net"
 #the "mse" defines our loss function to be quadratic
 #record the best result \beta with the "lambda.min" 
 for(k in 1:k){
@@ -579,17 +579,15 @@ u_beta <- unlist(u_beta)
 u_beta$"1"
 ```
 
-###Latent Factors
-Up to now, we have done data centralisation, and used the movie genres to derive the user genres, which can be used to construct $b_g = \vec{g}_m \cdot \vec{\beta}_u + \beta_{0u}$, so for each pair of 'userId' and 'movieId', we can make a rough prediction based on $\hat{r}_{ui} \sim \bar{r}_g + b_u + b_i + b_g$. This subsection will get us the last element $lf_{ui}$ to complete our model. 
+### Latent Factors
+Up to now, we have done data centralisation, and used the movie genres mean to derive the user genres, which can be used to construct $b_g = \vec{g}_m \cdot \vec{\beta}_u + \beta_{0u}$, so for each pair of 'userId' and 'movieId', we can make a very rough prediction based on $\hat{r}_{ui} \sim \bar{r}_g + b_u + b_i + b_g$. This subsection will get us the last element $lf_{ui}$ to complete our model $\hat{r}_{ui} \sim \bar{r}_g + b_u + b_i + b_{gui} + lf_{ui}$. 
 
-At the very beginning of this secession, we have had a mathematical justification for this model can help us to achieve the result we want. We now can construct a model to serve our purpose on the mathematical ground. 
+At the very beginning of this secession, we have had a mathematical justification for this model about why it can help us achieve the result we want. We now can construct a model to serve our purpose on that mathematical ground. 
 $$
-Loss = \frac{1}{2}(\vec{p}_u\cdot\vec{q}_i - rsid_{ui})^2 + \lambda(\|\vec{p}_u\|_2 + \|\vec{q}_i\|_2)
-$$
-$$
+Loss = \frac{1}{2}(\vec{p}_u\cdot\vec{q}_i - rsid_{ui})^2 + \lambda(\|\vec{p}_u\|_2 + \|\vec{q}_i\|_2)\\
 rsid_{ui} = \bar{r}_g + b_u + b_i + b_g - r_{ui} 
 $$
-We will find the best $\vec{p}_u$ and $\vec{q}_i$ for each user and movie respectively, so that our loss function is minimised. To note that, instead matrix we use vectors and single values in our loss function, this kind of set up will be more convenient for our sparse case. So the the learning iterations are also in a vector form to fit our needs. 
+We will derive the best $\vec{p}_u$ and $\vec{q}_i$ for each user and movie respectively, so that our loss function is minimised. To note that, instead of the R, P, Q matrix, we use the vectors and single rating element values in our loss function, this kind of set up will be more convenient for our sparse case. So the learning iterations are also in a vector form to fit our needs. 
 $$
 \vec{p}_{t+1} = \vec{p}_t - lr\cdot\nabla_pL\\
 \vec{q}_{t+1} = \vec{q}_t - lr\cdot\nabla_qL\\
@@ -597,12 +595,12 @@ $$
 \nabla_qL = err\cdot\vec{p}_t + \lambda\cdot\vec{q}_t\\
 err = \vec{p}_t\cdot\vec{q}_t - rsid_{ui}
 $$
-This set of formulas describe the whole calculation process, but in a reverse order, this way of ordering can more clearly explain themselves. To be success in computation, we need to tune these hyperparameters first:  
-1. **f**: is the factor length for each $\vec{p}_u$ and $\vec{q}_i$, which we mentioned in the beginning of the "Foundation" subsection without solving it. We will tune it first to construct $\vec{p}_u$ and $\vec{q}_i$, so we can proceed.  
+This set formulas describe the whole calculation process, but in a reverse order. This way of ordering can more clearly explain themselves. To be success in computation, we also need to tune some hyperparameters first:  
+1. **f**: is the factor length for each $\vec{p}_u$ and $\vec{q}_i$, which we mentioned in the beginning of the "Theoretical Foundations" subsection without a solution. We will tune it first to construct $\vec{p}_u$ and $\vec{q}_i$, so that we can proceed.  
 2. **lr**: is the learning rate, in some textbook it is also called step size, which will be more intuitive, since it controls how big the stride we are taking for each step in searching. There is a trade off, if the size is too big, not only we will never reach the minimum point of the bowl, but also the result can explode by keep climbing to the infinite maximum. But if we take too small stride each step, then it may take forever to reach the minimum point. So academically, researchers and practitioners are constantly searching and developing new ways of constructing this step size, someone calls it the art in machine learning. But we will only use the most brutal way to tune it by cross validation.  
-3. $\lambda$: is playing as a penalty coefficient to prevent from overfitting in loss function as usual, but it also decide how low we can reach down the bowl. If the **lr** controls the speed of searching/learning in general, then $\lambda$ controls the precision of learning. 
+3. $\lambda$: is playing as a penalty coefficient to prevent from overfitting in loss function as usual, but it also decide how good we can estimate the lowest point in the loss function bowl. If the **lr** controls the speed of searching/learning in general, then $\lambda$ controls the precision of learning. 
 
-Now we are ready to proceed to the calculation details. the following code will help us to get the $residual_{ui}$ for each user-movie paired ratings in "edx" dataset.
+Now we are ready to proceed to the calculation details. the following code will help us to get the $residual_{ui}$ for each user-movie paired ratings in "edx" dataset, after that we use the prepared data to tune those hyperparameters just described. 
 ```{r eval = FALSE}
 
 uid_train <- edx$userId %>% as.character()
@@ -627,8 +625,8 @@ resid_gen <- m_bias[u_bias[edx[, .(userId, movieId, rating)][
 #turn the 'err' = rsid column into a wide table with size of user# X movie#
 rtable_gen <- dcast(resid_gen, userId ~ movieId, value.var = "err")
 
-#keep the order of userId and movieId in training matrix
-#will be used for naming the training output user matrix and movie matrix
+#save the ordered userId and movieId in training matrix
+#will be used for naming the trained output user and movie matrix
 uid_gen <- rtable_gen[,1]
 mid_gen <- names(rtable_gen)[-1]
 
@@ -666,7 +664,7 @@ Mj_tr <- M_j[-Rid_cv]
 Mj_tst <- M_j[Rid_cv]
 ```
 
-In hyperparameter tuning, we use **Stochastic Gradient Descent** instead of going through all the 9,000,055 ratings, because SGD is super efficient in terms of learning speed, but not great at convergence. So we only use SGD to find the good parameter estimates, but use full size gradient descent (GD) in the final learning. The SGD has exactly the same iterations as normal GD described in above, but only train on a small sample (batch) of the full dataset in every epoch. 
+In hyperparameter tuning, we use **Stochastic Gradient Descent** instead of going through all the 9,000,055 ratings, because SGD is super efficient in terms of learning speed, but not great at convergence. So we only use SGD to find good parameter estimates, but use full size gradient descent (GD) in the final learning. The SGD has exactly the same iterations as normal GD described in above, but only train on a small sample (batch) of the full dataset in every epoch. 
 ```{r eval = FALSE}
 ###factor length###
 #these try on figures are randomly chosen
@@ -751,7 +749,7 @@ Lr_tune <- foreach(L_rate = Lrts, .combine = "c") %dopar% {
 qplot(x = Lrts, y = Lr_tune, geom = c("point", "line"))
 ```
 
-This time the learning-rate tuning rmse plot does not have a turning point, so instead we can locate the best rate by their slopes, when the tuning rmse slopes get smaller, the improvement by the next learning rate fades. Then we can define the first learning rate, whose slope drops under certain level (we choose slope < 0.1 in here), to be our choice of optimal learning rate. 
+The learning-rate tuning rmse plot does not have a turning point, so instead we will locate the best rate by their slopes, when the tuning rmse slopes get smaller, the improvement by trying the next learning rate fades. Then we can define the first learning rate, whose slope drops under certain level (we choose slope < 0.1 in here), to be our choice of optimal learning rate. 
 ```{r eval = FALSE}
 
 lr_slope <- sapply(1:(length(Lr_tune) - 1), function(k){
@@ -767,9 +765,9 @@ rm(Lrts, Lr_tune, lr_slope)#can be kept for plotting
 qplot(x = Lrts[-length(Lrts)], y = lr_slope, geom = c("point","line"))
 ```
 
-We will use the the full GD method instead of SGD to find the best $\lambda$, so there is one challenge in computation cost. Since $\lambda$ decides how close our learning result can be to the real minimum point, for the best result, we use the full gradient descent (GD) method instead of SGD to tune the $lambda$ to mimic our final learning computation process. But the full size training data is too big, so the computation cost is very high, in addition, the R is known for slow loop, therefore we are using the 'RcppArmadillo' package to write the gradient descent loop in C++, and source the C++ code back to R as a function. This C++ function is named as 'gdtune()' in below code chunk, the C++ code can be found in Appendix at the very end of this report. The manual to use the C++ code can be found on the 'Rcpp' package cran page. 
+We will use the the full GD method instead of SGD to find the best $\lambda$, but there is one challenge in computation cost. As mentioned before, the $\lambda$ decides how close our learning result can be to the real minimum point, for the best result, we use the full gradient descent (GD) method instead of SGD to tune the $lambda$ to mimic our final learning computation process, by saying mimic is becasue we will only train for very few epochs. But the full size training data is too big, so the computation cost is very high. In addition, the R is known for slow loop, therefore we are using the 'RcppArmadillo' package to write the gradient descent loop in C++, and source the C++ code back to R as a function. This C++ function is named as 'gdtune()' in below code chunk, the C++ code can be found in Appendix at the very end of this report. The manual to use the C++ code can be found on the 'Rcpp' package cran page. 
 ```{r eval = FALSE}
-
+#create P, Q with tuned already factor length = f_opt
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f_opt*rtable_gen@Dim[1], 0, 1), nrow = f_opt)
 set.seed(4, sample.kind = "Rounding")
@@ -795,9 +793,9 @@ lmd_opt <- lmds[which.min(lmd_tune)]
 rm(P, Q, lmds, lmd_tune)#save for plot
 ```
 
-Up to now, we have tuned all the important hyperparameters to be ready to give us an expected good result. Rigorously speaking, we have not done all the parameters yet, that is because our training dataset size allowing us to risk the epochs (iteration steps) number by guessing. The industrial practice may require the epochs to be tuned as well, because too large epochs may cause the model to be over trained, over training will also increase prediction error like overfitting [@nielsen_2015]. 
+By now, we have tuned all the important hyperparameters to be ready to give us an expected good result. Rigorously speaking, we have not done all the parameters yet, that is because our training dataset size allowing us to risk the epochs (iteration steps) number by guessing. The industrial practice may require the epochs to be tuned as well, because too large epochs may cause the model to be over trained, over training will also increase prediction error like overfitting [@nielsen_2015]. 
 
-This final piece of code to put all the tuned hyperparameters together is also written in C++, and sourced as function gd(), the C++ code is put in Appendix at very end of report.
+This final piece of code to put all the tuned hyperparameters together is also written in C++, and sourced as function 'gd()', the C++ code is put in Appendix at very end of report.
 ```{r eval = FALSE}
 #the user matrix P, and movie matrix Q are generated inside the 'gd()' function
 #the seed for C++ sourced function need to be set in R
@@ -809,23 +807,24 @@ pq <- gd(U_i = U_i, M_j = M_j, y = R,
          lambda = lmd_opt, epochs = 50)
 ```
 
-The 'gd()' function returns a list we named as **pq**, that contains trained user matrix P with each column representing an 'userId', and movie matrix Q with each column representing a "movieId". We can use the code below to check any "nan" value in them, the "nan" is the result of training explosion, which means either the learning rate or the $\lambda$ is too big, then we need to re-tune them. 
+The 'gd()' function returns a list we named as **pq**, which contains trained user matrix P with each column representing an 'userId', and movie matrix Q with each column representing a "movieId". We can use the code below to check any "nan" value in them, the "nan" is the result of training explosion, which means either the learning rate or the $\lambda$ is too big, then we need to re-tune them. 
 ```{r}
 sum(is.nan(pq$P))
 sum(is.nan(pq$Q))
 ```
 
-We also apply the "userId" order and "movieId" order to the matrix P, Q, which was recorded before from the rsid matrix code part. Then matrix P, Q's column names can be called by "userId" and "movieId", which will be convenient in the final prediction composition. 
+We also have the "userId" order and "movieId" order to the matrix P, Q, which was recorded before from the rsid matrix code part. We name the matrix P, Q's columns by "userId" and "movieId", which will be convenient in the final prediction composition. Because we trained them according to each $r_{ui}$'s "userId" and "movieId", we can apply the ordered "userId" and "movieId" from rating table directly on P, Q.
 ```{r eval = FALSE}
+#the uid_gen and mid_gen are saved from the previous data preparation chunk 
 colnames(pq$P) <- uid_gen$userId %>% as.character()
 colnames(pq$Q) <- mid_gen
 ```
 
 By the end of this session, we have got all the elements in our prediction model 
-$\hat{r}_{ui} = \bar{r}_g + b_u + b_m + b_g + lf_{ui}$, where both $b_g$ and $lf_{ui}$ have to be composed according to the predicted rating's "userId" and "movieId".
+$\hat{r}_{ui} = \bar{r}_g + b_u + b_m + b_{gui} + lf_{ui}$, where both $b_{gui}$ and $lf_{ui}$ have to be composed accordingly with the be predicted rating's "userId" and "movieId".
 
 ## Final Result
-As described in above, to make a prediction, we have to know the rating of the "movieId" is given by which "userId", then we can composite the $b_g$ and $lf_{ui}$ accordingly, and put these "userId" and "movieId" specified elements into prediction model. We will use the "userId" and "movieId" from each rating in the "validation" dataset, to call the respective element vectors in the following prediction composition code chunk. 
+As described in above, to make a prediction, we have to know the "userId" and "MovieId" of being predicted rating, then we can composite the $b_{gui}$ and $lf_{ui}$ accordingly, and put these "userId" and "movieId" specified elements into the prediction model. So We need to use the "userId" and "movieId" from each rating in the "validation" dataset, to call the respective trained elements and vectors, the following prediction composition code chunk is implemented by this concept. 
 ```{r eval = FALSE}
 
 #get the 'userId' and 'movieId' from validation dataset
@@ -834,7 +833,7 @@ mid_val <- validation$movieId %>% as.character()
 
 i <- length(validation$rating)
 #use the 'userId' and 'movieId' to call 
-#the respective movie and user gen vectors for gen_bias
+#the respective movie and user gen vectors to construct gen_bias(b_gui)
 gen_bias <- foreach(i = 1:i, .combine = "c") %dopar% {
   gen[,mid_val[i]] %*% u_beta[[uid_val[i]]][-1] + u_beta[[uid_val[i]]][1]
 }
@@ -854,22 +853,23 @@ pred <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
     , ":="(pred = pred <- g_mean + u_bias + m_bias - gen_bias - f_gd,
            err = pred - rating)]
 ```
+\textcolor{red}{*}the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", because we trained them from the residuals of $b_{gui} \sim \bar r_g + b_u + b_m - r_{ui} \to r_{ui} \sim \bar r_g + b_u + b_m - b_{gui}$ and $lf_{ui} \sim \bar r_g + b_u + b_m - b_{gui}- r_{ui} \to r_{ui} \sim \bar r_g + b_u + b_m - b_{gui} - lf_{ui}$.  
 
 We now use the prediction error from above calculation to get the \textcolor{blue}{**Final RMSE**}:
 ```{r}
 sqrt(mean(pred$err * pred$err))
 ```
 
-The goal of prediction \textcolor{blue}{**RMSE:0.8053019**} $<$ \textcolor{red}{0.86490} is reached. 
+The goal of prediction \textcolor{blue}{**RMSE:0.8053019**} $<$ \textcolor{red}{0.86490} is achieved. 
 
 ## Conclusion
-To summarise what we have done to reach our RMSE goal, the whole process is broken into 4 big parts: data exploration, problem identification, model construction, and code implementation. In the data exploration, we get a picture of the dataset, then we simplified the multi-attributes rating into a user-movie rating matrix, so by inspiration of the "Latent Factor" algorithm of @Koren2009, our goal becomes a matrix factorisation problem on a mathematical ground. Around this concept, we further break down those attributes into user factors and movie factors, and use them to build a model that is versatile enough to predict any user-movie paired rating. 
+To summarise what we have done to reach our prediction RMSE goal, the whole process is broken into 4 big parts: data exploration, problem identification, model construction, and code implementation. In the data exploration, we get a picture of the dataset, then we simplified the multi-attributes rating into a user-movie rating matrix, so by inspiration of the "Latent Factor" algorithm of @Koren2009, our goal becomes a matrix factorisation estimation problem on a mathematical ground. Around this concept, we further broke down those attributes into user factors and movie factors, and use them to build a model that is versatile enough to predict any user-movie paired rating. 
 
-Beside the "Latent Factor" as the core in our algorithm, we employed an "Elastic Net" with the movie genres to derive genres vector for each user. Although we can use "Latent Factor" directly on the ratings without exploiting the hidden user genres info, but this extra approach is believed not only can improve the "Latent Factor" learning speed afterward, but also can improve a recommendation system accuracy with more user attributes data, such as movie search histories, and if this recommendation system is used in Amazon Prime Video, then we will have much richer user info connected with their shopping behaviour, then this user genres info can be used for classifying them into different groups, then we could have a group bias, which can reduce computation cost, for new customers we can provide a better service to meet their broad tastes without throwing darts blindly. We have to bare in mind that, the real world data is much larger and complicated, so reduce computation cost can improve data efficiency to companies, as well as customer experiences. 
+Beside the "Latent Factor" as the core in our algorithm, we employed an "Elastic Net" algorithm with the given movie genres to derive genres vector for each user. Although we can use "Latent Factor" directly on the ratings without exploiting the hidden user genres info, but this extra approach is believed not only can improve the "Latent Factor" learning speed afterward, but also can improve a recommendation system performance with more user attributes data, such as movie search histories, and if this recommendation system is used in such as Amazon Prime Video, then we will have much richer user info connected with their shopping behaviour, then this user genres info from shopping history can be used for classifying them into different groups, then we could have a group bias, which can reduce computation cost. And for new customers we can provide a better service to meet their broad tastes without throwing darts blindly. We have to bare in mind that, the real world data is much larger and complex, so reduce computation cost can improve data efficiency to companies, as well as customer experiences. 
 
-Even though our prediction RMSE is much lower than the target, we can not guarantee the same result in the real world, since we are playing in a naive dataset. Especially in the case of newly onboarded customer, we have no watch history about her, then we are really throwing darts in dark to push the movie she might like. So except for the taste information we argued in above, we can also use the timestamp info that was neglected by us in report, we can push the concurrent popular movies to her to test the taste. 
+Even though our prediction RMSE is much better than the target, we can not guarantee the same result in the real world, since we are playing in a naive dataset. Especially in the case of newly on board customers, we have no watch history about them, then we are really throwing darts in dark to push the movies she might like. So except for the taste information we argued in above, we can also use the timestamp info that was neglected by us in report, we can push the currently popular movies to them to test the taste. 
 
-At the very end of this report, we put the table of RMSE path of our model to demonstrate how effectiveness of the "Latent Factor" algorithm in a recommendation system is. 
+At the very end of this report, we put a table of RMSE path of our model to demonstrate how effectiveness of the "Latent Factor" algorithm in a recommendation system is. 
 ```{r echo = FALSE}
 prederr_tbl <- m_bias[u_bias[validation[, .(userId, movieId, rating)][
   , ":="(gen_bias = gen_bias, f_gd = f_gd)], on = .(userId)],
@@ -892,7 +892,6 @@ rmse_tbltmp <- data.table(
 knitr::kable(rmse_tbltmp)
 rm(prederr_tbl, rmse_tbl, rmse_tbltmp)
 ```
-\textcolor{red}{*} "g_mean + u_bias + m_bias + gen_bias + latent_factor" is for demonstration only, the real code in calculation is "g_mean + u_bias + m_bias - gen_bias - latent_factor", refer the code chunk in above for explanations.  
 
 ## Refnereces
 
