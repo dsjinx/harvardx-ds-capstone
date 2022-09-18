@@ -10,7 +10,8 @@ library(tidyverse)
 library(data.table)
 library(doParallel)
 library(Matrix)
-load("rmd.RData")
+load("rmd.RData")#this data generated after run the R script code file
+#and save the environment in the same dir as .rmd file
 ```
 ```{r eval = FALSE}
 #libraries are used in this report
