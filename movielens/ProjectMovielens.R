@@ -1,5 +1,70 @@
+##########################################################
+# Create edx set, validation set (final hold-out test set)
+##########################################################
+
+# Note: this process could take a couple of minutes
+
+if(!require(tidyverse)) install.packages("tidyverse", 
+                                         repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", 
+                                     repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", 
+                                          repos = "http://cran.us.r-project.org")
+
+library(tidyverse)
+library(caret)
+library(data.table)
+
+# MovieLens 10M dataset:
+# https://grouplens.org/datasets/movielens/10m/
+# http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+dl <- tempfile()
+download.file("https://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+
+ratings <- fread(text = gsub("::", "\t", 
+                             readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), 
+                          "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+
+# if using R 3.6 or earlier:
+movies <- as.data.frame(movies) %>% 
+  mutate(movieId = as.numeric(levels(movieId))[movieId],
+         title = as.character(title),
+         genres = as.character(genres))
+# if using R 4.0 or later:
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
+                                           title = as.character(title),
+                                           genres = as.character(genres))
+
+
+movielens <- left_join(ratings, movies, by = "movieId")
+
+# Validation set will be 10% of MovieLens data
+# if using R 3.5 or earlier, use `set.seed(1)`
+set.seed(1, sample.kind="Rounding") 
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, 
+                                  list = FALSE)
+edx <- movielens[-test_index,]
+temp <- movielens[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+  semi_join(edx, by = "movieId") %>%
+  semi_join(edx, by = "userId")
+
+# Add rows removed from validation set back into edx set
+removed <- anti_join(temp, validation)
+edx <- rbind(edx, removed)
+
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+#############################################
+
 #save data set(edx, validation) at local directory, so we do not need to repeat 
-#above process, if we get stuck and crashed during the following process
+#above process, if we get stuck or crash during the following process
 save(edx, validation, file = "mledx.rdata")
 load("mledx.rdata")
 
@@ -333,6 +398,9 @@ lmds <- seq(0.01, 0.1, length.out = 10)
 #see the https://www.rcpp.org/ for detailed C++ in R manual
 #https://dirk.eddelbuettel.com/code/rcpp.armadillo.html for details in 
 #linear algebra C++ library 'RcppArmadillo' in R
+#the C++ code is in "lmdtune.cpp" file in the github:
+#https://github.com/dsjinx/harvardx-ds-capstone/tree/main/movielens
+
 lmd_tune <- sapply(lmds, function(lmd){
   gdtune(P = P, Q = Q, ytr = train_R, ytst = test_R,
          Uitr = Ui_tr, Mjtr = Mj_tr, Uitst = Ui_tst, Mjtst = Mj_tst,
@@ -351,14 +419,16 @@ rm(P, Q, lmds, lmd_tune)#save for plot
 #use the tuned factor length, learning rate ,and lambda to train by gradient
 #descent for the matrix P, Q
 #the gradient descent loop is also written in C++ as the function 'gd()'
-#the the C++ code is ready for use in "gd.cpp" file 
+#the the C++ code is ready for use in "gd.cpp" file in the github:
+#https://github.com/dsjinx/harvardx-ds-capstone/tree/main/movielens
+
 set.seed(5, sample.kind = "Rounding")
 pq <- gd(U_i = U_i, M_j = M_j, y = R,
          u_n = rtable_gen@Dim[1], m_n = rtable_gen@Dim[2],
          factor_n = f_opt, L_rate = L_rate_opt,
          lambda = lmd_opt, epochs = 50)
 
-#check any nan result
+#check any 'nan' result
 #if any, then L_rate is too big, cause the training results exploded
 sum(is.nan(pq$P))
 sum(is.nan(pq$Q))

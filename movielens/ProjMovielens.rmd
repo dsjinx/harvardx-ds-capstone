@@ -12,7 +12,7 @@ library(doParallel)
 library(Matrix)
 load("rmd.RData")
 #this data file is generated after run the R script code file
-#ave the environment in the same dir as .rmd file with the name as rmd
+#save the environment in the same dir as .rmd file with the name as rmd
 ```
 ```{r eval = FALSE}
 #libraries are used in this report
