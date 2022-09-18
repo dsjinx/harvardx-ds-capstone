@@ -10,8 +10,9 @@ library(tidyverse)
 library(data.table)
 library(doParallel)
 library(Matrix)
-load("rmd.RData")#this data generated after run the R script code file
-#and save the environment in the same dir as .rmd file
+load("rmd.RData")
+#this data file is generated after run the R script code file
+#ave the environment in the same dir as .rmd file with the name as rmd
 ```
 ```{r eval = FALSE}
 #libraries are used in this report
@@ -249,7 +250,7 @@ R = \begin{bmatrix} \vec{User_1}^{T}\\
 r_{u1} & \ldots & r_{ui}
 \end{bmatrix} = \begin{bmatrix} \vec{Movie_1} & \vec{Movie_2} & \ldots & \vec{Movie_i}\end{bmatrix}
 $$
-So in our rating matrix, we have to centralise in both row and column directions simultaneously. To stress the simultaneous centralisation, we are not performing the de-mean on one direction then the other, instead we treat the rating $r_{ui}$ to be on its own r-scale in a third dimension apart from the user-movie dimension, because $r_{ui}$ is the result of some mapping function $f(\vec{user_u}, \vec{movie_i})$. One more thing to consider is the sparsity of our rating matrix, there are very few $r_{ui}$ are known to us, and we don't know whether the user watched the movie, or she just could not be bothered to rate it. So instead impute the missing value in the matrix with 0's, we just exclude them from our computation in here. The other reason of doing so is, we will otherwise get a 0 mean, because those 0's adding no value to the sum of all ratings, but making our divisor enormously large. 
+So in our rating matrix, we have to centralise in both row and column directions simultaneously. To stress the simultaneous centralisation, we are not performing the de-mean on one direction then the other, instead we treat the rating $r_{ui}$ to be on its own r-scale in a third dimension apart from the user-movie dimension, because $r_{ui}$ is the result of some mapping function $f(\vec{user_u}, \vec{movie_i})$. One more thing to consider is the sparsity of our rating matrix, there are very few $r_{ui}$ are known to us, and we don't know whether the user watched the movie, or she just could not be bothered to rate it. So instead imputing the missing value in the matrix with 0's, we just exclude them from our computation in here. The other reason of doing so is, we will otherwise get a 0 mean, because those 0's adding no value to the sum of all ratings, but making our divisor enormously large. 
 ```{r}
 #global mean
 g_mean <- mean(edx$rating)
@@ -278,7 +279,7 @@ $$
 We also employ a 5-fold cross validation method to overcome potential overfitting.
 ```{r eval = FALSE}
 
-#making 5-folds cross validation sets
+#make 5-folds cross validation sets
 
 set.seed(2, sample.kind= "Rounding")
 
@@ -469,7 +470,9 @@ gen[, c("gen_cat","364")][1:10,]
 ```
 
 ```{r eval = FALSE}
-
+#convert the movies genres name char vector into a numeric vector
+#each element corresponds to the index number in the genres names vector
+#the gen_cat we constructed in genre name cleaning code chunk
 ind <- foreach(g = 1:m_n, .packages = "foreach") %dopar% {
   foreach(i = 1:length(m_gen[[g]]), .combine = "c",
           .packages = "stringr") %do% {
@@ -606,7 +609,7 @@ Now we are ready to proceed to the calculation details. the following code will 
 uid_train <- edx$userId %>% as.character()
 mid_train <- edx$movieId %>% as.character()
 
-#composite gen_bias for the user-movie pair in edx trainning set
+#compose gen_bias for the user-movie pair in edx trainning set
 ml <- length(edx$movieId)
 gen_bias_train <- foreach(i = 1:ml, .combine = "c",
                           .packages = "Matrix") %dopar% {
@@ -642,7 +645,7 @@ rm(resid_gen, rtable_gen)
 ```
 
 ```{r eval = FALSE}
-#####hyperparameters tuning####
+#####hyperparameters tuning#####
 #create train-test set(1 fold)
 set.seed(0, sample.kind = "Rounding")
 
@@ -767,6 +770,9 @@ qplot(x = Lrts[-length(Lrts)], y = lr_slope, geom = c("point","line"))
 
 In next, we will use the the full GD method instead of SGD to find the best $\lambda$, but there is one challenge in computation cost. As mentioned before, the $\lambda$ decides how close our learning result can be to the real minimum point, for the best result, we use the full gradient descent (GD) method instead of SGD to tune the $lambda$ to mimic our final learning computation process, by saying mimic is because we will only train for very few epochs. But the full size training data is too big, so the computation cost is very high. In addition, the R is known for slow loop, therefore we are using the 'RcppArmadillo' package to write the gradient descent loop in C++, and source the C++ code back to R as a function. This C++ function is named as 'gdtune()' in below code chunk, the C++ code can be found in Appendix at the very end of this report. The manual to use the C++ code can be found on the 'Rcpp' package cran page. 
 ```{r eval = FALSE}
+###lambda###
+rm(lambda)
+
 #create P, Q with tuned already factor length = f_opt
 set.seed(3, sample.kind = "Rounding")
 P <- matrix(runif(f_opt*rtable_gen@Dim[1], 0, 1), nrow = f_opt)
@@ -775,13 +781,15 @@ Q <- matrix(runif(f_opt*rtable_gen@Dim[2], 0, 1), nrow = f_opt)
 
 lmds <- seq(0.01, 0.1, length.out = 10)
 
+#https://dirk.eddelbuettel.com/code/rcpp.armadillo.html
+#https://www.rcpp.org/ for C++ in R maunal details
 lmd_tune <- sapply(lmds, function(lmd){
   gdtune(P = P, Q = Q, ytr = train_R, ytst = test_R, 
          Uitr = Ui_tr, Mjtr = Mj_tr, Uitst = Ui_tst, Mjtst = Mj_tst, 
          L_rate = L_rate_opt, lambda = lmd, epochs = 5)
-  })
+  })#function returns err^2
 
-lmd_tune <- sqrt(lmd_tune / length(test_R))
+lmd_tune <- sqrt(lmd_tune / length(test_R))#turn the results into rmse
 ```
 ```{r echo = FALSE}
 qplot(x = lmds, y = lmd_tune, geom = c("point", "line"))
@@ -824,7 +832,7 @@ By the end of this session, we have got all the elements in our prediction model
 $\hat{r}_{ui} = \bar{r}_g + b_u + b_m + b_{gui} + lf_{ui} + \epsilon$, where both $b_{gui}$ and $lf_{ui}$ have to be composed accordingly with the predicting rating's "userId" and "movieId".
 
 ## Final Result
-As described in above, to make a prediction, we have to know the "userId" and "MovieId" of the to be predicted rating, then we can composite the $b_{gui}$ and $lf_{ui}$ accordingly, and put these "userId" and "movieId" specified elements into the prediction model. So We need to use the "userId" and "movieId" from each rating in the "validation" dataset, to call the respective trained elements and vectors, the following prediction composition code chunk is implemented by this concept. 
+As described in above, to make a prediction, we have to know the "userId" and "MovieId" of the to be predicted rating, then we can compose the $b_{gui}$ and $lf_{ui}$ accordingly, and put these "userId" and "movieId" specified elements into the prediction model. So We need to use the "userId" and "movieId" from each rating in the "validation" dataset, to call the respective trained elements and vectors, the following prediction composition code chunk is implemented by this concept. 
 ```{r eval = FALSE}
 
 #get the 'userId' and 'movieId' from validation dataset
