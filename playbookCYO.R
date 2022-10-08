@@ -11,6 +11,13 @@ data <- fread("adult.csv")
 str(data)
 sum(is.na(data))
 
+data <- data[, income := as.factor(income)]
+sapply(data, class)
+
+ggplot(data, aes(x = income)) + geom_bar(width = 0.3) + 
+  scale_y_log10() + labs(y = "log10(count)")
+sum(data$income == "<=50K") / sum(data$income == ">50K")
+
 ##numeric features 1st
 names(data)
 cols <- c("age", "fnlwgt", "education.num", 
@@ -53,15 +60,10 @@ mis_locate <- data[, lapply(.SD, function(i) sum(i == "?")),
 mis_locate / dim(data)[1] * 100
 
 char_fp <- data[, ..char_cols]
-char_fp <- cbind(char_fp, income = data$income)
 char_fp <- char_fp[, lapply(.SD, as.factor)] 
+char_fp <- cbind(char_fp, income = data$income)
 str(char_fp)
 sapply(char_fp, levels) #not be shown in pdf, inspect any wired input
-
-char_fp %>% setDF() %>% ggplot(aes(x = char_fp[,1:8])) + 
-  geom_bar() + scale_y_log10() + 
-  theme(axis.text.x = element_text(angle = 45, size = 8)) +
-  facet_grid(income ~ ., scales = "free_y")
 
 setDF(char_fp)
 ggp1 <- lapply(1:3, function(j){
@@ -93,9 +95,6 @@ rm(ggp1, ggp2, ggp3, char_fp, mis_locate, char_cols, num_fp,
 
 #methods details
 #train/test split
-data <- data[, income := as.factor(income)]
-sapply(data, class)
-
 set.seed(1, sample.kind = "Rounding")
 ind <- createDataPartition(1:dim(data)[1], times = 1, list = FALSE, p = 0.2)
 train <- data[-ind, ]
@@ -103,7 +102,15 @@ test <- data[ind, ]
 
 rm(ind)
 
-#1. rpart
+#0. guessing
+prev <- sum(train$income == "<=50K") / dim(train)[1]
+set.seed(10, sample.kind = "Rounding")
+pred_guess <- sample(c("<=50K", ">50K"), dim(test)[1], replace = TRUE, 
+                     prob = c(prev, 1-prev))
+confusionMatrix(as.factor(pred_guess), test$income, positive = ">50K")
+F_meas(as.factor(pred_guess), reference = test$income)
+
+#1. tree
 cl <- makePSOCKcluster(3)
 registerDoParallel(cl)
 
@@ -114,10 +121,11 @@ fit_tree <- train(income ~ ., data = train, method = "rpart",
               trControl = treecontrol, 
               tuneGrid = data.frame(cp = seq(0, 0.1, length.out = 10)))
 plot(fit_tree)
-fit_tree$bestTune
+fit_tree
 
 pred_tree <- predict(fit_tree, test)
-gauge_tree <- confusionMatrix(pred_tree, test$income)
+gauge_tree <- confusionMatrix(pred_tree, test$income, positive = ">50K")
 print(gauge_tree)
+F_meas(pred_tree, reference = test$income)
 
 #2. random forest
