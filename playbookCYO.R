@@ -40,7 +40,7 @@ outliers <- data.table(
   caplos = data$capital.loss[ind_out$capital.loss],
   weekhrs = data$hours.per.week[ind_out$hours.per.week])
 
-num_fp <- cbind(num_fp, income = factor(data$income))
+num_fp <- cbind(num_fp, data$income)
 
 trellis.par.set("fontsize", list(text = 8.5))
 featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "box", 
@@ -63,7 +63,7 @@ char_fp <- data[, ..char_cols]
 char_fp <- char_fp[, lapply(.SD, as.factor)] 
 char_fp <- cbind(char_fp, income = data$income)
 str(char_fp)
-sapply(char_fp, levels) #not be shown in pdf, inspect any wired input
+sapply(char_fp, levels) #inspect any wired input
 
 setDF(char_fp)
 ggp1 <- lapply(1:3, function(j){
@@ -111,17 +111,18 @@ confusionMatrix(as.factor(pred_guess), test$income, positive = ">50K")
 F_meas(as.factor(pred_guess), reference = test$income)
 
 #1. tree
-cl <- makePSOCKcluster(3)
-registerDoParallel(cl)
+registerDoParallel(cores = 3)
 
 set.seed(2, sample.kind = "Rounding")
 ind_cv <- createFolds(1:dim(train)[1], k = 5, returnTrain = TRUE)
+
 treecontrol <- trainControl(method = "cv", index = ind_cv)
 fit_tree <- train(income ~ ., data = train, method = "rpart",
               trControl = treecontrol, 
               tuneGrid = data.frame(cp = seq(0, 0.1, length.out = 10)))
 plot(fit_tree)
-fit_tree
+fit_tree$finalModel
+varImp(fit_tree, scale = FALSE)
 
 pred_tree <- predict(fit_tree, test)
 gauge_tree <- confusionMatrix(pred_tree, test$income, positive = ">50K")
@@ -129,3 +130,53 @@ print(gauge_tree)
 F_meas(pred_tree, reference = test$income)
 
 #2. random forest
+rfcontrol <- trainControl(method = "cv", index = ind_cv)
+fit_forest <- train(income ~., data = train, method = "rf",
+                    trControl = rfcontrol, 
+                    tuneGrid = data.frame(mtry = 8:14))
+plot(fit_forest)
+fit_forest$finalModel
+best_mtry <- fit_forest$bestTune$mtry
+
+nodesize <- c(10, 50, 100, 200, 500)
+tune_nds <- sapply(nodesize, function(nd){
+  train(income ~., data = train, method = "rf",
+        trControl = trycontrol, 
+        tuneGrid = data.frame(mtry = best_mtry),
+        nodesize = nd)$results$Accuracy
+})
+qplot(nodesize, tune_nds, geom = c("point", "line"))
+best_node <- nodesize[which.max(tune_nds)]
+
+try_cv <- createFolds(1:1000, k = 5, returnTrain = TRUE)
+trycontrol <- trainControl(method = "cv", index = try_cv)
+fit_forest1 <- train(income ~., data = train[1:1000], method = "rf",
+                    trControl = trycontrol, 
+                    tuneGrid = data.frame(mtry = seq(2, 14, 2)),
+                    ntree = best_ntree,
+                    nodesize = best_node
+                    )
+plot(fit_forest)
+fit_forest$finalModel
+best_mtry <- fit_forest$bestTune$mtry
+
+ntrees <- c(100, 300, 500, 1500)
+tune_ntree <- sapply(ntrees, function(nt){
+  train(income ~., data = train[1:1000], method = "rf",
+        trControl = trycontrol, 
+        tuneGrid = data.frame(mtry = best_mtry),
+        ntree = nt)$results$Accuracy})
+qplot(ntrees, tune_ntree, geom = c("point", "line"))
+best_ntree <- ntrees[which.max(tune_ntree)]
+
+nodesize <- c(10, 50, 100, 200,500)
+tune_nds <- sapply(nodesize, function(nd){
+  train(income ~., data = train[1:1000], method = "rf",
+        trControl = trycontrol, 
+        tuneGrid = data.frame(mtry = best_mtry),
+        nodesize = nd)$results$Accuracy
+})
+qplot(nodesize, tune_nds, geom = c("point", "line"))
+best_node <- nodesize[which.max(tune_nds)]
+
+varImp(fit_forest, scale = FALSE)
