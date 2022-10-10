@@ -131,17 +131,16 @@ F_meas(pred_tree, reference = test$income)
 
 #2. random forest
 rfcontrol <- trainControl(method = "cv", index = ind_cv)
-fit_forest <- train(income ~., data = train, method = "rf",
+tune_forest <- train(income ~., data = train, method = "rf",
                     trControl = rfcontrol, 
                     tuneGrid = data.frame(mtry = seq(2, 14, 2)))
-plot(fit_forest)
-fit_forest$finalModel
-best_mtry <- fit_forest$bestTune$mtry
+plot(tune_forest)
+tune_forest$finalModel
+best_mtry <- tune_forest$bestTune$mtry
 
 nodesize <- c(10, 50, 100, 200, 500)
 tune_nds <- sapply(nodesize, function(nd){
   train(income ~., data = train, method = "rf",
-        trControl = trycontrol, 
         tuneGrid = data.frame(mtry = best_mtry),
         nodesize = nd)$results$Accuracy
 })
@@ -151,12 +150,24 @@ best_node <- nodesize[which.max(tune_nds)]
 ntrees <- seq(10, 150, 10)
 tune_ntree <- sapply(ntrees, function(nt){
   train(income ~., data = train, method = "rf",
-        trControl = trycontrol, 
         tuneGrid = data.frame(mtry = best_mtry),
         nodesize = best_node,
         ntree = nt)$results$Accuracy})
 qplot(ntrees, tune_ntree, geom = c("point", "line"))
 best_ntree <- ntrees[which.max(tune_ntree)]
+
+fit_forest <- train(income ~., data = train, method = "rf",
+                     tuneGrid = data.frame(mtry = best_mtry),
+                     nodesize = best_node,
+                     ntree = best_ntree)
+plot(fit_forest)
+fit_forest$finalModel
+varImp(fit_forest, scale = FALSE)
+
+pred_forest <- predict(fit_forest, test)
+gauge_forest <- confusionMatrix(pred_forest, test$income, positive = ">50K")
+print(gauge_forest)
+F_meas(pred_forest, reference = test$income)
 
 ############TRY
 set.seed(19, sample.kind = "Rounding")
@@ -164,20 +175,17 @@ try_train <- sample(1:dim(train)[1], 3500, replace = FALSE)
 try_train <- train[try_train]
 try_cv <- createFolds(1:3500, k = 5, returnTrain = TRUE)
 trycontrol <- trainControl(method = "cv", index = try_cv)
-try_forest <- train(income ~., data = try_train, method = "rf",
+trytune_forest <- train(income ~., data = try_train, method = "rf",
                     trControl = trycontrol, 
-                    tuneGrid = data.frame(mtry = seq(2, 14, 2)),
-                    nodesize = best_node,
-                    ntree = best_ntree
-                    )
-plot(try_forest)
-try_forest$finalModel
-best_mtry <- try_forest$bestTune$mtry
+                    tuneGrid = data.frame(mtry = seq(2, 14, 2)))
+
+plot(trytune_forest)
+trytune_forest$finalModel
+best_mtry <- trytune_forest$bestTune$mtry
 
 nodesize <- seq(1, 20, 5)
 tune_nds <- sapply(nodesize, function(nd){
   train(income ~., data = try_train, method = "rf",
-        trControl = trycontrol, 
         tuneGrid = data.frame(mtry = best_mtry),
         nodesize = nd)$results$Accuracy})
 qplot(nodesize, tune_nds, geom = c("point", "line"))
@@ -186,11 +194,16 @@ best_node <- nodesize[which.max(tune_nds)]
 ntrees <- seq(10, 150, 10)
 tune_ntree <- sapply(ntrees, function(nt){
   train(income ~., data = try_train, method = "rf",
-        trControl = trycontrol, 
         tuneGrid = data.frame(mtry = best_mtry),
         nodesize = best_node,
         ntree = nt)$results$Accuracy})
 qplot(ntrees, tune_ntree, geom = c("point", "line"))
 best_ntree <- ntrees[which.max(tune_ntree)]
 
+try_forest <- train(income ~., data = try_train, method = "rf",
+                    tuneGrid = data.frame(mtry = seq(2, 14, 2)),
+                    nodesize = best_node,
+                    ntree = best_ntree)
+
 varImp(fit_forest, scale = FALSE)
+
