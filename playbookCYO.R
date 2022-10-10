@@ -122,8 +122,7 @@ fit_tree <- train(income ~ ., data = train, method = "rpart",
               trControl = treecontrol, 
               tuneGrid = data.frame(cp = seq(0, 0.1, length.out = 10)))
 plot(fit_tree)
-fit_tree$results
-fit_tree$bestTune
+fit_tree
 fit_tree$finalModel
 varImp(fit_tree, scale = FALSE)
 
@@ -138,6 +137,7 @@ tune_forest <- train(income ~., data = train, method = "rf",
                     trControl = rfcontrol, 
                     tuneGrid = data.frame(mtry = seq(2, 14, 2)))
 plot(tune_forest)
+tune_forest
 tune_forest$finalModel
 best_mtry <- tune_forest$bestTune$mtry
 
@@ -174,6 +174,7 @@ fit_forest <- train(income ~., data = train, method = "rf",
                      tuneGrid = data.frame(mtry = best_mtry),
                      nodesize = best_node,
                      ntree = best_ntree)
+fit_forest
 fit_forest$finalModel
 varImp(fit_forest, scale = FALSE)
 
@@ -191,8 +192,8 @@ trycontrol <- trainControl(method = "cv", index = try_cv)
 trytune_forest <- train(income ~., data = try_train, method = "rf",
                     trControl = trycontrol, 
                     tuneGrid = data.frame(mtry = seq(2, 14, 2)))
-
 plot(trytune_forest)
+trytune_forest
 trytune_forest$finalModel
 best_mtry <- trytune_forest$bestTune$mtry
 
