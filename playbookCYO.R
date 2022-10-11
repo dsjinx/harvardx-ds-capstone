@@ -141,7 +141,7 @@ tune_forest
 tune_forest$finalModel
 best_mtry <- tune_forest$bestTune$mtry
 
-nodesize <- c(10, 50, 100, 200, 500)
+nodesize <- seq(1, 20, 2)
 tune_nds <- sapply(nodesize, function(nd){
   train(income ~., data = train, method = "rf",
         trControl = rfcontrol,
@@ -151,7 +151,7 @@ tune_nds <- sapply(nodesize, function(nd){
 qplot(nodesize, tune_nds, geom = c("point", "line"))
 best_node <- nodesize[which.max(tune_nds)]
 
-ntrees <- seq(10, 150, 10)
+ntrees <- seq(10, 200, 10)
 tune_ntree <- sapply(ntrees, function(nt){
   train(income ~., data = train, method = "rf",
         trControl = rfcontrol,
@@ -161,20 +161,10 @@ tune_ntree <- sapply(ntrees, function(nt){
 qplot(ntrees, tune_ntree, geom = c("point", "line"))
 best_ntree <- ntrees[which.max(tune_ntree)]
 
-tuned_forest <- train(income ~., data = train, method = "rf",
-                     trControl = rfcontrol, 
-                     tuneGrid = data.frame(mtry = seq(2, 14, 2)),
-                     nodesize = best_node,
-                     ntree = best_ntree)
-plot(tuned_forest)
-tuned_forest$finalModel
-best_mtry <- tune_forest$bestTune$mtry
-
 fit_forest <- train(income ~., data = train, method = "rf",
                      tuneGrid = data.frame(mtry = best_mtry),
                      nodesize = best_node,
                      ntree = best_ntree)
-fit_forest
 fit_forest$finalModel
 varImp(fit_forest, scale = FALSE)
 
