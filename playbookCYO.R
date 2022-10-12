@@ -6,11 +6,13 @@ library(doParallel)
 library(e1071)
 
 #https://www.kaggle.com/datasets/uciml/adult-census-income
+#github: 
 data <- fread("adult.csv")
 
 #data exploration
 str(data)
 sum(is.na(data))
+data[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
 
 data <- data[, income := as.factor(income)]
 sapply(data, class)
@@ -21,9 +23,9 @@ sum(data$income == "<=50K") / sum(data$income == ">50K")
 
 ##numeric features 1st
 names(data)
-cols <- c("age", "fnlwgt", "education.num", 
-          "capital.gain", "capital.loss", "hours.per.week")
+cols <- names(which(sapply(data, class) == "integer"))
 summary(data[, ..cols])
+
 num_fp <- data[, ..cols][, lapply(.SD, 
               function(j) (j - mean(j)) / sd(j)), .SDcols = cols]
 summary(num_fp)
@@ -91,8 +93,8 @@ ggp3 <- lapply(7:8, function(j){
 })
 ggmatrix(ggp3, nrow = 1, ncol = 2, xAxisLabels = char_cols[7:8])
 
-rm(ggp1, ggp2, ggp3, char_fp, mis_locate, char_cols, num_fp, 
-   outliers, ind_out, ind_max, ind_min, cols)
+rm(ggp1, ggp2, ggp3, char_fp, mis_locate, num_fp, outliers, 
+   ind_out, ind_max, ind_min)
 
 #methods details
 #train/test split
@@ -100,8 +102,6 @@ set.seed(1, sample.kind = "Rounding")
 ind <- createDataPartition(1:dim(data)[1], times = 1, list = FALSE, p = 0.2)
 train <- data[-ind, ]
 test <- data[ind, ]
-
-rm(ind)
 
 #0. guessing
 prev <- sum(train$income == "<=50K") / dim(train)[1]
@@ -215,4 +215,71 @@ try_forest <- train(income ~., data = try_train, method = "rf",
 ############
 
 #SVM
+##digitise all categorical columns
+data_digit <- data[, ..char_cols]
+sapply(data_digit, unique)
+sapply(data_digit, uniqueN)
+data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
+
+data_digit <- data_digit[, 
+              lapply(.SD, function(j) str_replace(j, "\\?", "0"))]
+data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
+data_digit[, lapply(.SD, function(j) sum(str_detect(j, "0")))]
+
+unique(data_digit$education)
+sum(str_detect(data_digit$education, "10th"))
+
+sapply(data_digit, unique)
+
+##containing "?" cols mean "0"
+wc <- 1:uniqueN(data_digit$workclass)
+for(w in wc){data_digit$workclass[which(data_digit$workclass == 
+                    unique(data_digit$workclass)[w])] <- wc[w] - 1}
+rm(w, wc)
+
+oc <- 1:uniqueN(data_digit$occupation)
+for(o in oc){data_digit$occupation[which(data_digit$occupation == 
+                    unique(data_digit$occupation)[o])] <- oc[o] - 1}
+rm(o, oc)
+
+#"0" is in 2nd place of uniqueN(), special treatment convert "2" -> "0"
+nc <- 1:uniqueN(data_digit$native.country)
+for(n in nc){data_digit$native.country[which(data_digit$native.country == 
+                    unique(data_digit$native.country)[n])] <- nc[n]}
+data_digit$native.country[which(data_digit$native.country == "2")] <- 0
+rm(n, nc)
+
+ed <- 1:uniqueN(data_digit$education)
+for(e in ed){data_digit$education[which(data_digit$education == 
+                    unique(data_digit$education)[e])] = ed[e]}
+rm(e, ed)
+
+ms <- 1:uniqueN(data_digit$marital.status)
+for(m in ms){data_digit$marital.status[which(data_digit$marital.status == 
+                    unique(data_digit$marital.status)[m])] = ms[m]}
+rm(m, ms)
+
+rl <- 1:uniqueN(data_digit$relationship)
+for(r in rl){data_digit$relationship[which(data_digit$relationship == 
+                    unique(data_digit$relationship)[r])] = rl[r]}
+rm(r, rl)
+
+rc <- 1:uniqueN(data_digit$race)
+for(r in rc){data_digit$race[which(data_digit$race == 
+                    unique(data_digit$race)[r])] = rc[r]}
+rm(r, rc)
+
+sx <- 1:uniqueN(data_digit$sex)
+for(s in sx){data_digit$sex[which(data_digit$sex == 
+                    unique(data_digit$sex)[s])] = sx[s]}
+rm(s, sx)
+
+data_digit <- data_digit[, lapply(.SD, as.numeric)]
+data_digit <- data[, (char_cols) := data_digit][, 
+                      income := as.factor(income)]
+str(data_digit)
+
+#same partition index from trees
+train_svm <- data_digit[-ind, ]
+test_svm <- data_digit[ind, ]
 
