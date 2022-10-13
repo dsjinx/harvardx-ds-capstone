@@ -4,6 +4,7 @@ library(caret)
 library(GGally)
 library(doParallel)
 library(e1071)
+library(caretEnsemble)
 
 #https://www.kaggle.com/datasets/uciml/adult-census-income
 #github: 
@@ -215,7 +216,7 @@ try_forest <- train(income ~., data = try_train, method = "rf",
                     ntree = best_ntree)
 
 ############
-#SVM
+#3. SVM
 ##digitise all categorical columns
 data_digit <- data[, ..char_cols]
 sapply(data_digit, unique)
@@ -296,7 +297,7 @@ trycontrol <- trainControl(method = "cv", index = try_cv)
 try_svm <- train(income ~., data = try_svtrain, method = "svmLinear2",
                  trControl = trycontrol, 
                  tuneGrid = data.frame(
-                   cost = c(2^-5, 2^-2, 1, 2^2, 2^5, 2^10)))
+                   cost = c(1, 2^5)))
 plot(try_svm)
 try_svm
 try_svm$finalModel
@@ -331,7 +332,7 @@ F_meas(cg_pred, reference = test_svm$income)
 
 ########
 
-#glm
+#4. glm
 fit_glm <- train(income ~., data = try_svtrain, method = "glm", 
                  trControl = trycontrol, family = binomial)
 fit_glm
@@ -340,3 +341,12 @@ cfglm <- confusionMatrix(pred_glm, test_svm$income, positive = ">50K")
 print(cfglm)
 F_meas(pred_glm, test_svm$income)
 
+#5. ensemble
+crEnsem <- trainControl(method = "cv", index = try_cv)
+ensemble_fit <- caretList(income ~., data = try_svtrain, trControl = crEnsem,
+                          tuneList = list(
+                          svm = caretModelSpec(method = "svmLinear2", 
+                                  tuneGrid = data.frame(cost = 32))),
+                          glm = caretModelSpec(method = "glm", 
+                                  family = binomial))
+modelCor(resamples(ensemble_fit))
