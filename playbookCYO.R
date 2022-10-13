@@ -342,11 +342,43 @@ print(cfglm)
 F_meas(pred_glm, test_svm$income)
 
 #5. ensemble
-crEnsem <- trainControl(method = "cv", index = try_cv)
+cnvt_income <- try_svtrain[, lapply(.SD, 
+                             function (j) str_replace(j, "\\>", "gt")), 
+                             .SDcols = c("income")]
+cnvt_income <- cnvt_income[, lapply(.SD, 
+                             function(j) str_replace(j, "\\<=", "loe"))]
+
+cnvtst_income <- test_svm[, lapply(.SD, 
+                            function (j) str_replace(j, "\\>", "gt")), 
+                           .SDcols = c("income")]
+cnvtst_income <- cnvtst_income[, lapply(.SD, 
+                            function(j) str_replace(j, "\\<=", "loe"))]
+
+try_svtrain[, income := cnvt_income]
+test_svm[, income := cnvtst_income]
+
+crEnsem <- trainControl(method = "cv", index = try_cv, 
+                        savePredictions = "final", classProbs = TRUE)
 ensemble_fit <- caretList(income ~., data = try_svtrain, trControl = crEnsem,
                           tuneList = list(
                           svm = caretModelSpec(method = "svmLinear2", 
-                                  tuneGrid = data.frame(cost = 32))),
+                                  tuneGrid = data.frame(cost = 32)),
                           glm = caretModelSpec(method = "glm", 
-                                  family = binomial))
+                                  family = binomial)))
 modelCor(resamples(ensemble_fit))
+stack <- caretStack(ensemble_fit, method = "glm", 
+                    trControl = trainControl(method = "boot", number = 5, 
+                                             savePredictions = "final"))
+stack_pred <- predict(stack, test_svm)
+cfm_stack <- confusionMatrix(stack_pred, as.factor(test_svm$income), 
+                             positive = "gt50K")
+print(cfm_stack)
+F_meas(stack_pred, as.factor(test_svm$income))
+
+#######
+"Error: At least one of the class levels is not a valid R variable name; 
+This will cause errors when class probabilities are generated because 
+the variables names will be converted to  X..50K, X.50K . 
+Please use factor levels that can be used as valid R variable names  
+(see ?make.names for help)."
+
