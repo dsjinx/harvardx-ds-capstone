@@ -175,8 +175,10 @@ F_meas(pred_forest, reference = test$income)
 
 ############TRY
 set.seed(19, sample.kind = "Rounding")
-try_train <- sample(1:dim(train)[1], 3500, replace = FALSE)
-try_train <- train[try_train]
+try_ind <- sample(1:dim(train)[1], 3500, replace = FALSE)
+try_train <- train[try_ind]
+
+set.seed(92, sample.kind = "Rounding")
 try_cv <- createFolds(1:3500, k = 5, returnTrain = TRUE)
 trycontrol <- trainControl(method = "cv", index = try_cv)
 trytune_forest <- train(income ~., data = try_train, method = "rf",
@@ -213,7 +215,6 @@ try_forest <- train(income ~., data = try_train, method = "rf",
                     ntree = best_ntree)
 
 ############
-
 #SVM
 ##digitise all categorical columns
 data_digit <- data[, ..char_cols]
@@ -223,6 +224,7 @@ data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
 
 data_digit <- data_digit[, 
               lapply(.SD, function(j) str_replace(j, "\\?", "0"))]
+
 data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
 data_digit[, lapply(.SD, function(j) sum(str_detect(j, "0")))]
 
@@ -275,11 +277,66 @@ for(s in sx){data_digit$sex[which(data_digit$sex ==
 rm(s, sx)
 
 data_digit <- data_digit[, lapply(.SD, as.numeric)]
-data_digit <- data[, (char_cols) := data_digit][, 
-                      income := as.factor(income)]
+data_digit <- data[, (char_cols) := data_digit]
 str(data_digit)
 
 #same partition index from trees
 train_svm <- data_digit[-ind, ]
 test_svm <- data_digit[ind, ]
+
+########try refer L177
+set.seed(19, sample.kind = "Rounding")
+try_ind <- sample(1:dim(train_svm)[1], 3500, replace = FALSE)
+try_svtrain <- train_svm[try_ind, ]
+
+#linear kernel
+set.seed(92, sample.kind = "Rounding")
+try_cv <- createFolds(1:3500, k = 5, returnTrain = TRUE)
+trycontrol <- trainControl(method = "cv", index = try_cv)
+try_svm <- train(income ~., data = try_svtrain, method = "svmLinear2",
+                 trControl = trycontrol, 
+                 tuneGrid = data.frame(
+                   cost = c(2^-5, 2^-2, 1, 2^2, 2^5, 2^10)))
+plot(try_svm)
+try_svm
+try_svm$finalModel
+
+tst_svm <- predict(try_svm, test_svm)
+cfm_svm <- confusionMatrix(tst_svm, test_svm$income, positive = ">50K")
+print(cfm_svm)
+F_meas(tst_svm, reference = test_svm$income)
+
+#2nd degree polynomial kernel
+c <- c(2^-2, 2^2)
+g <- c(2^-5, 2^2)
+para_grid <- expand.grid(cost = c, gamma = g)
+tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame) %:% 
+  foreach(k = 1:5, .combine = c) %dopar% {
+    cv_train <- svm(income ~., data = train_svm[try_cv[[k]]], 
+                    cost = para_grid[j, 1], gamma = para_grid[j, 2], 
+                    kernel = "polynomial", degree = 2)
+    val_acc <- sum(predict(cv_train, test_svm) == 
+                     test_svm$income) / dim(test_svm)[1]
+  } 
+cv_acc <- apply(tune_cg, 2, mean)
+qplot(1:4, cv_acc, geom = c("point", "line"))
+best_cg <- para_grid[which.min(cv_acc), ]
+
+cg_svm <- svm(income ~., data = train_svm, cost = best_cg$cost, 
+              gamma = best_cg$gamma, kernel = "polynomial", degree = 2)
+cg_pred <- predict(cg_svm, test_svm)
+cfm_cg <- confusionMatrix(cg_pred, test_svm$income, positive = ">50K")
+print(cfm_cg)
+F_meas(cg_pred, reference = test_svm$income)
+
+########
+
+#glm
+fit_glm <- train(income ~., data = try_svtrain, method = "glm", 
+                 trControl = trycontrol, family = binomial)
+fit_glm
+pred_glm <- predict(fit_glm, test_svm)
+cfglm <- confusionMatrix(pred_glm, test_svm$income, positive = ">50K")
+print(cfglm)
+F_meas(pred_glm, test_svm$income)
 
