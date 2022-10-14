@@ -166,7 +166,6 @@ fit_forest <- train(income ~., data = train, method = "rf",
                      tuneGrid = data.frame(mtry = best_mtry),
                      nodesize = best_node,
                      ntree = best_ntree)
-fit_forest$finalModel
 varImp(fit_forest, scale = FALSE)
 
 pred_forest <- predict(fit_forest, test)
@@ -219,8 +218,9 @@ try_forest <- train(income ~., data = try_train, method = "rf",
 #3. SVM
 ##digitise all categorical columns
 data_digit <- data[, ..char_cols]
-sapply(data_digit, unique)
 sapply(data_digit, uniqueN)
+sapply(data_digit, unique)
+
 data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
 
 data_digit <- data_digit[, 
@@ -285,6 +285,46 @@ str(data_digit)
 train_svm <- data_digit[-ind, ]
 test_svm <- data_digit[ind, ]
 
+#linear kernel
+svmcontrol <- trainControl(method = "cv", index = ind_cv)
+fit_svm <- train(income ~., data = train_svm, method = "svmLinear2",
+                 trControl = svmcontrol, 
+                 tuneGrid = data.frame(cost = c(2^-5, 2^-2, 1, 2^2, 2^5)))
+plot(fit_svm)
+fit_svm
+fit_svm$finalModel
+
+pred_svm <- predict(fit_svm, test_svm)
+gauge_svm <- confusionMatrix(tst_svm, test_svm$income, positive = ">50K")
+print(gauge_svm)
+F_meas(pred_svm, reference = test_svm$income)
+
+#2nd degree polynomial kernel
+c <- c(2^-2, 2^2)
+g <- c(2^-5, 2^2)
+para_grid <- expand.grid(cost = c, gamma = g)
+tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame) %:% 
+  foreach(k = 1:5, .combine = c) %dopar% {
+    cv_train <- svm(income ~., data = train_svm[ind_cv[[k]],], 
+                    cost = para_grid[j, 1], gamma = para_grid[j, 2], 
+                    kernel = "polynomial", degree = 2)
+    val_acc <- sum(predict(cv_train, train_svm[-ind_cv[[k]]],) == 
+                     train_svm[-ind_cv[[k]]]$income) / dim(test_svm)[1]
+  }
+
+tune_acc <- apply(tune_cg, 2, mean)
+qplot(1:4, tune_acc, geom = c("point", "line"))
+best_cg <- para_grid[which.min(tune_acc), ]
+
+fit_svm_poly <- svm(income ~., data = train_svm, cost = best_cg$cost, 
+              gamma = best_cg$gamma, kernel = "polynomial", degree = 2)
+
+pred_svm_poly <- predict(fit_svm_poly, test_svm)
+gauge_svm_poly <- confusionMatrix(pred_svm_poly, test_svm$income, 
+                                  positive = ">50K")
+print(gauge_svm_poly)
+F_meas(pred_svm_poly, reference = test_svm$income)
+
 ########try refer L177
 set.seed(19, sample.kind = "Rounding")
 try_ind <- sample(1:dim(train_svm)[1], 3500, replace = FALSE)
@@ -333,16 +373,17 @@ F_meas(cg_pred, reference = test_svm$income)
 ########
 
 #4. glm
-fit_glm <- train(income ~., data = try_svtrain, method = "glm", 
-                 trControl = trycontrol, family = binomial)
-fit_glm
+fit_glm <- train(income ~., data = train_svm, method = "glm", 
+                 family = binomial)
+fit_glm$finalModel #?
+
 pred_glm <- predict(fit_glm, test_svm)
-cfglm <- confusionMatrix(pred_glm, test_svm$income, positive = ">50K")
-print(cfglm)
-F_meas(pred_glm, test_svm$income)
+gauge_glm <- confusionMatrix(pred_glm, test_svm$income, positive = ">50K")
+print(gauge_glm)
+F_meas(pred_glm, reference = test_svm$income)
 
 #5. ensemble
-cnvt_income <- try_svtrain[, lapply(.SD, 
+cnvt_income <- train_svm[, lapply(.SD, 
                              function (j) str_replace(j, "\\>", "gt")), 
                              .SDcols = c("income")]
 cnvt_income <- cnvt_income[, lapply(.SD, 
@@ -354,32 +395,32 @@ cnvtst_income <- test_svm[, lapply(.SD,
 cnvtst_income <- cnvtst_income[, lapply(.SD, 
                             function(j) str_replace(j, "\\<=", "loe"))]
 
-try_svtrain[, income := cnvt_income]
+train_svm[, income := cnvt_income]
 test_svm[, income := cnvtst_income]
 
-crEnsem <- trainControl(method = "cv", index = try_cv, 
+crEnsem <- trainControl(method = "cv", index = ind_cv, 
                         savePredictions = "final", classProbs = TRUE)
-ensemble_fit <- caretList(income ~., data = try_svtrain, trControl = crEnsem,
+ensemble_fit <- caretList(income ~., data = train_svm, trControl = crEnsem,
                           tuneList = list(
                           svm = caretModelSpec(method = "svmLinear2", 
                                   tuneGrid = data.frame(cost = 32)),
                           glm = caretModelSpec(method = "glm", 
                                   family = binomial),
                           rf = caretModelSpec(method = "rf", 
-                                  tuneGrid = data.frame(mtry = 10),
-                                  nodesize = 100,
-                                  ntree = 50)))
+                                  tuneGrid = data.frame(mtry = best_mtry),
+                                  nodesize = best_node,
+                                  ntree = best_ntree)))
 
 modelCor(resamples(ensemble_fit))
 
 stack <- caretStack(ensemble_fit, method = "glm", 
                     trControl = trainControl(method = "boot", number = 5, 
                                              savePredictions = "final"))
-stack_pred <- predict(stack, test_svm)
-cfm_stack <- confusionMatrix(stack_pred, as.factor(test_svm$income), 
+pred_stack <- predict(stack, test_svm)
+gauge_stack <- confusionMatrix(stack_pred, as.factor(test_svm$income), 
                              positive = "gt50K")
-print(cfm_stack)
-F_meas(stack_pred, as.factor(test_svm$income))
+print(gauge_stack)
+F_meas(pred_stack, as.factor(test_svm$income))
 
 #######
 "Error: At least one of the class levels is not a valid R variable name; 
