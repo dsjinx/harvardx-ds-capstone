@@ -1,10 +1,10 @@
 library(tidyverse)
 library(data.table)
 library(caret)
-library(GGally)
 library(doParallel)
 library(e1071)
 library(caretEnsemble)
+library(GGally)
 
 #https://www.kaggle.com/datasets/uciml/adult-census-income
 #github: 
@@ -364,8 +364,14 @@ ensemble_fit <- caretList(income ~., data = try_svtrain, trControl = crEnsem,
                           svm = caretModelSpec(method = "svmLinear2", 
                                   tuneGrid = data.frame(cost = 32)),
                           glm = caretModelSpec(method = "glm", 
-                                  family = binomial)))
+                                  family = binomial),
+                          rf = caretModelSpec(method = "rf", 
+                                  tuneGrid = data.frame(mtry = 10),
+                                  nodesize = 100,
+                                  ntree = 50)))
+
 modelCor(resamples(ensemble_fit))
+
 stack <- caretStack(ensemble_fit, method = "glm", 
                     trControl = trainControl(method = "boot", number = 5, 
                                              savePredictions = "final"))
