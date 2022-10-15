@@ -6,8 +6,10 @@ library(e1071)
 library(caretEnsemble)
 library(GGally)
 
+#!!!!relative path and unzip
 #https://www.kaggle.com/datasets/uciml/adult-census-income
 #github: 
+setwd("../CYO")
 data <- fread("adult.csv")
 
 #data exploration
@@ -310,6 +312,8 @@ F_meas(pred_svm, reference = test_svm$income)
 c <- c(2^-5, 1, 2^5)
 g <- c(2^-5, 1, 2^5)
 para_grid <- expand.grid(cost = c, gamma = g)
+
+
 tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame, 
                    .packages = "e1071") %:% 
   foreach(k = 1:5, .combine = c) %dopar% {
@@ -317,7 +321,7 @@ tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame,
                     cost = para_grid[j, 1], gamma = para_grid[j, 2], 
                     kernel = "polynomial", degree = 2)
     val_acc <- sum(predict(cv_train, train_svm[-ind_cv[[k]]],) == 
-          train_svm[-ind_cv[[k]]]$income) / dim(train_svm[-ind_cv[[k]]])[1]
+          train_svm[-ind_cv[[k]],]$income) / dim(train_svm[-ind_cv[[k]]])[1]
   }
 
 tune_acc <- apply(tune_cg, 2, mean)
