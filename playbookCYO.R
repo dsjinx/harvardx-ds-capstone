@@ -22,6 +22,12 @@ ggplot(data, aes(x = income)) + geom_bar(width = 0.3) +
   scale_y_log10() + labs(y = "log10(count)")
 sum(data$income == "<=50K") / sum(data$income == ">50K")
 
+plot_temp <- data[, .(pct = 100 * .N / dim(data)[1]), by = .(income)]
+ggplot(plot_temp, aes(income, pct)) + 
+  geom_bar(stat = "identity", width = 0.3) + 
+  geom_text(aes(label = format(round(pct, 2), nsmall = 2)),
+            vjust = 2, color = "white")
+
 ##numeric features 1st
 names(data)
 cols <- names(which(sapply(data, class) == "integer"))
