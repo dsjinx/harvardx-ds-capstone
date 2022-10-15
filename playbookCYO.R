@@ -6,7 +6,6 @@ library(e1071)
 library(caretEnsemble)
 library(GGally)
 
-#!!!!relative path and unzip
 #https://www.kaggle.com/datasets/uciml/adult-census-income
 #github: 
 data <- fread("../CYO/adult.csv")
@@ -297,7 +296,7 @@ svmcontrol <- trainControl(method = "cv", index = ind_cv)
 fit_svm <- train(income ~., data = train_svm, method = "svmLinear2",
                  trControl = svmcontrol, 
                  tuneGrid = data.frame(cost = c(
-                   2^-15, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
+                      2^-13, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
 plot(fit_svm)
 fit_svm
 fit_svm$finalModel
@@ -312,19 +311,35 @@ c <- c(2^-5, 1, 2^5)
 g <- c(2^-5, 1, 2^5)
 para_grid <- expand.grid(cost = c, gamma = g)
 
+#mini tuning cv set, mimic the income class distribution from original dataset
+under_ind <- which(data$income == "<=50K")
+above_ind <- which(data$income == ">50K")
+
+set.seed(3, sample.kind = "Rounding")
+mini_under <- sample(under_ind, length(under_ind) * 0.2, 
+                     replace = FALSE)
+set.seed(4, sample.kind = "Rounding")
+mini_above <- sample(above_ind, length(above_ind) * 0.2,
+                     replace = FALSE)
+mini_ind <- c(mini_under, mini_above)
+
+set.seed(5, sample.kind = "Rounding")
+mini_cv <- createFolds(mini_ind, k = 5, returnTrain = TRUE)
+mini_cv_ind <- lapply(1:5, function(k) mini_ind[mini_cv[[k]]])
 
 tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame, 
                    .packages = "e1071") %:% 
   foreach(k = 1:5, .combine = c) %dopar% {
-    cv_train <- svm(income ~., data = train_svm[ind_cv[[k]],], 
+    cv_train <- svm(income ~., data = data_digit[mini_cv_ind[[k]],], 
                     cost = para_grid[j, 1], gamma = para_grid[j, 2], 
                     kernel = "polynomial", degree = 2)
-    val_acc <- sum(predict(cv_train, train_svm[-ind_cv[[k]],]) == 
-          train_svm[-ind_cv[[k]],]$income) / dim(train_svm[-ind_cv[[k]],])[1]
+    val_acc <- sum(predict(cv_train, data_digit[-mini_cv_ind[[k]],]) == 
+      data_digit[-mini_cv_ind[[k]],]$income) / 
+      dim(data_digit[-mini_cv_ind[[k]],])[1]
   }
 
 tune_acc <- apply(tune_cg, 2, mean)
-qplot(1:4, tune_acc, geom = c("point", "line"))
+qplot(1:dim(tune_cg)[2], tune_acc, geom = c("point", "line"))
 best_cg <- para_grid[which.min(tune_acc), ]
 
 fit_svm_poly <- svm(income ~., data = train_svm, cost = best_cg$cost, 
