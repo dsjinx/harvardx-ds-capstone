@@ -6,11 +6,9 @@ library(e1071)
 library(caretEnsemble)
 library(GGally)
 
-#!!!!relative path and unzip
 #https://www.kaggle.com/datasets/uciml/adult-census-income
 #github: 
-setwd("../CYO")
-data <- fread("adult.csv")
+data <- fread("../CYO/adult.csv")
 
 #data exploration
 str(data)
@@ -326,19 +324,22 @@ mini_above <- sample(above_ind, length(above_ind) * 0.2,
 mini_ind <- c(mini_under, mini_above)
 
 set.seed(5, sample.kind = "Rounding")
-mini_cv <- createFolds(1:length(mini_ind), k = 5, returnTrain = TRUE)
+mini_cv <- createFolds(mini_ind, k = 5, returnTrain = TRUE)
+mini_cv_ind <- lapply(1:5, function(k) mini_ind[mini_cv[[k]]])
+
 tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame, 
                    .packages = "e1071") %:% 
   foreach(k = 1:5, .combine = c) %dopar% {
-    cv_train <- svm(income ~., data = data_digit[mini_cv[[k]],], 
+    cv_train <- svm(income ~., data = data_digit[mini_cv_ind[[k]],], 
                     cost = para_grid[j, 1], gamma = para_grid[j, 2], 
                     kernel = "polynomial", degree = 2)
-    val_acc <- sum(predict(cv_train, data_digit[-mini_cv[[k]],]) == 
-      data_digit[-mini_cv[[k]],]$income) / dim(data_digit[-mini_cv[[k]],])[1]
+    val_acc <- sum(predict(cv_train, data_digit[-mini_cv_ind[[k]],]) == 
+      data_digit[-mini_cv_ind[[k]],]$income) / 
+      dim(data_digit[-mini_cv_ind[[k]],])[1]
   }
 
 tune_acc <- apply(tune_cg, 2, mean)
-qplot(1:9, tune_acc, geom = c("point", "line"))
+qplot(1:dim(tune_cg)[2], tune_acc, geom = c("point", "line"))
 best_cg <- para_grid[which.min(tune_acc), ]
 
 fit_svm_poly <- svm(income ~., data = train_svm, cost = best_cg$cost, 
@@ -378,7 +379,7 @@ g <- c(2^-5, 2^2)
 para_grid <- expand.grid(cost = c, gamma = g)
 tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame) %:% 
   foreach(k = 1:5, .combine = c) %dopar% {
-    cv_train <- svm(income ~., data = train_svm[try_cv[[k]]], 
+    cv_train <- svm(income ~., data = train_svm[try_cv[[k]],], 
                     cost = para_grid[j, 1], gamma = para_grid[j, 2], 
                     kernel = "polynomial", degree = 2)
     val_acc <- sum(predict(cv_train, test_svm) == 
@@ -394,6 +395,17 @@ cg_pred <- predict(cg_svm, test_svm)
 cfm_cg <- confusionMatrix(cg_pred, test_svm$income, positive = ">50K")
 print(cfm_cg)
 F_meas(cg_pred, reference = test_svm$income)
+
+#saved draft 
+tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame, 
+                   .packages = "e1071") %:% 
+  foreach(k = 1:5, .combine = c) %dopar% {
+    cv_train <- svm(income ~., data = train_svm[ind_cv[[k]],], 
+                    cost = para_grid[j, 1], gamma = para_grid[j, 2], 
+                    kernel = "polynomial", degree = 2)
+    val_acc <- sum(predict(cv_train, train_svm[-ind_cv[[k]],]) == 
+            train_svm[-ind_cv[[k]],]$income) / dim(train_svm[-ind_cv[[k]],])[1]
+  }
 
 ########
 
