@@ -338,7 +338,7 @@ tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame,
   }
 
 tune_acc <- apply(tune_cg, 2, mean)
-qplot(1:4, tune_acc, geom = c("point", "line"))
+qplot(1:9, tune_acc, geom = c("point", "line"))
 best_cg <- para_grid[which.min(tune_acc), ]
 
 fit_svm_poly <- svm(income ~., data = train_svm, cost = best_cg$cost, 
