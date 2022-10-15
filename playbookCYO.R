@@ -9,8 +9,7 @@ library(GGally)
 #!!!!relative path and unzip
 #https://www.kaggle.com/datasets/uciml/adult-census-income
 #github: 
-setwd("../CYO")
-data <- fread("adult.csv")
+data <- fread("../CYO/adult.csv")
 
 #data exploration
 str(data)
@@ -320,8 +319,8 @@ tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame,
     cv_train <- svm(income ~., data = train_svm[ind_cv[[k]],], 
                     cost = para_grid[j, 1], gamma = para_grid[j, 2], 
                     kernel = "polynomial", degree = 2)
-    val_acc <- sum(predict(cv_train, train_svm[-ind_cv[[k]]],) == 
-          train_svm[-ind_cv[[k]],]$income) / dim(train_svm[-ind_cv[[k]]])[1]
+    val_acc <- sum(predict(cv_train, train_svm[-ind_cv[[k]],]) == 
+          train_svm[-ind_cv[[k]],]$income) / dim(train_svm[-ind_cv[[k]],])[1]
   }
 
 tune_acc <- apply(tune_cg, 2, mean)
@@ -365,7 +364,7 @@ g <- c(2^-5, 2^2)
 para_grid <- expand.grid(cost = c, gamma = g)
 tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame) %:% 
   foreach(k = 1:5, .combine = c) %dopar% {
-    cv_train <- svm(income ~., data = train_svm[try_cv[[k]]], 
+    cv_train <- svm(income ~., data = train_svm[try_cv[[k]],], 
                     cost = para_grid[j, 1], gamma = para_grid[j, 2], 
                     kernel = "polynomial", degree = 2)
     val_acc <- sum(predict(cv_train, test_svm) == 
@@ -381,6 +380,17 @@ cg_pred <- predict(cg_svm, test_svm)
 cfm_cg <- confusionMatrix(cg_pred, test_svm$income, positive = ">50K")
 print(cfm_cg)
 F_meas(cg_pred, reference = test_svm$income)
+
+#saved draft 
+tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame, 
+                   .packages = "e1071") %:% 
+  foreach(k = 1:5, .combine = c) %dopar% {
+    cv_train <- svm(income ~., data = train_svm[ind_cv[[k]],], 
+                    cost = para_grid[j, 1], gamma = para_grid[j, 2], 
+                    kernel = "polynomial", degree = 2)
+    val_acc <- sum(predict(cv_train, train_svm[-ind_cv[[k]],]) == 
+            train_svm[-ind_cv[[k]],]$income) / dim(train_svm[-ind_cv[[k]],])[1]
+  }
 
 ########
 
