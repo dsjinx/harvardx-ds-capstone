@@ -289,27 +289,29 @@ test_svm <- data_digit[ind, ]
 svmcontrol <- trainControl(method = "cv", index = ind_cv)
 fit_svm <- train(income ~., data = train_svm, method = "svmLinear2",
                  trControl = svmcontrol, 
-                 tuneGrid = data.frame(cost = c(2^-5, 2^-2, 1, 2^2, 2^5)))
+                 tuneGrid = data.frame(cost = c(
+                   2^-15, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
 plot(fit_svm)
 fit_svm
 fit_svm$finalModel
 
 pred_svm <- predict(fit_svm, test_svm)
-gauge_svm <- confusionMatrix(tst_svm, test_svm$income, positive = ">50K")
+gauge_svm <- confusionMatrix(pred_svm, test_svm$income, positive = ">50K")
 print(gauge_svm)
 F_meas(pred_svm, reference = test_svm$income)
 
 #2nd degree polynomial kernel
-c <- c(2^-2, 2^2)
-g <- c(2^-5, 2^2)
+c <- c(2^-5, 1, 2^5)
+g <- c(2^-5, 1, 2^5)
 para_grid <- expand.grid(cost = c, gamma = g)
-tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame) %:% 
+tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame, 
+                   .packages = "e1071") %:% 
   foreach(k = 1:5, .combine = c) %dopar% {
     cv_train <- svm(income ~., data = train_svm[ind_cv[[k]],], 
                     cost = para_grid[j, 1], gamma = para_grid[j, 2], 
                     kernel = "polynomial", degree = 2)
     val_acc <- sum(predict(cv_train, train_svm[-ind_cv[[k]]],) == 
-                     train_svm[-ind_cv[[k]]]$income) / dim(test_svm)[1]
+          train_svm[-ind_cv[[k]]]$income) / dim(train_svm[-ind_cv[[k]]])[1]
   }
 
 tune_acc <- apply(tune_cg, 2, mean)
