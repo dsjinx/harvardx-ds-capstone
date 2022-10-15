@@ -1,0 +1,37 @@
+---
+title: "CYOincome"
+author: "Jin Xin"
+output: pdf_document
+date: "Oct, 2022"
+bibliography: CYOref.bib
+---
+
+```{r include = FALSE}
+#these pkgs used for generating report
+library(tidyverse)
+library(data.table)
+library(caret)
+library(doParallel)
+library(e1071)
+library(caretEnsemble)
+library(GGally)
+```
+```{r eval = FALSE}
+#libraries are used in this report
+library(tidyverse)
+library(data.table)
+library(caret)
+library(doParallel)
+library(e1071)
+library(caretEnsemble)
+library(GGally)
+```
+##Executive Summary
+This report is going to apply different methods for achieving a good $F_1$ score on income level classification. The Adult Income Census dataset has two income classes: "<= 50K", ">50K". The challenge is the class dominance of "<=50K", which made the ">50K" class to be short-sampled, so it is hard to achieve a good accuracy of ">50K" class. The methods used in this report include CART (classification and regression tree), random forest, SVM (support vector machine), and logistic regression. The best performing individual method is ??? with a $F_1$ score of ???. In addition, the stacking method is used to combine the tuned random forest, SVM, and GLM, and the achieved $F_1$ score is ????. The results indicate that the ....
+
+##Introduction
+We are going to apply different but not exhaustive categories of classification methods in the report. The $F_1$ score is used as evaluation metric, the reason is coming from the unbalanced sample size in the dataset. The Adult Income Census datast we use in this report classifies the income levels into two groups, one is "<=50K", and the other ">50K", but the ">50K" class has much smaller sample size comparing to "<=50" class, [@nielsen_2015] and many practical machine learning articles suggest that better result can always be achieved by increasing sample size. On the contrary, small sample size may hinder to achieve a desirable result. The balanced $F_1$ score can help us evaluate both sensitivity and specificity, this attribute is a rather effective performance metric to tell us how good the applied method in predicting both classes.  
+
+The following content is broken into three sections. In the data exploration part, we will explore the data in a top-down strategy, by having a broad view of the dataset structure, and break the predictor attributes into groups according to the value classes, then look for any trend or relations across those attributes. After that, we will go into algorithm details and performance in the methods details part, we will justify the reason of choosing those methods used in this report. Lastly, we will evaluate the overall performances across different methods. 
+
+##Data Exploration

@@ -116,7 +116,7 @@ test <- data[ind, ]
 prev <- sum(train$income == "<=50K") / dim(train)[1]
 set.seed(10, sample.kind = "Rounding")
 pred_guess <- sample(c("<=50K", ">50K"), dim(test)[1], replace = TRUE, 
-                     prob = c(prev, 1-prev))
+                     prob = c(prev, 1 - prev))
 confusionMatrix(as.factor(pred_guess), test$income, positive = ">50K")
 F_meas(as.factor(pred_guess), reference = test$income)
 
