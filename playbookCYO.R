@@ -41,7 +41,7 @@ num_fp <- data[, ..cols][, lapply(.SD,
               function(j) (j - mean(j)) / sd(j)), .SDcols = cols]
 summary(num_fp) #check unusual outlier
 
-###check the outliers
+###check the outliers in details
 ind_min <- num_fp[, lapply(.SD, which.min)]
 ind_max <- num_fp[, lapply(.SD, which.max)]
 ind_out <- rbind(ind_min, ind_max)
@@ -54,6 +54,7 @@ outliers <- data.table(
   caplos = data$capital.loss[ind_out$capital.loss],
   weekhrs = data$hours.per.week[ind_out$hours.per.week])
 
+#plot to inspect any correlation exist across numeric features
 num_fp <- cbind(num_fp, data$income)
 
 trellis.par.set("fontsize", list(text = 8.5))

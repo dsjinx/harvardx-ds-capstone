@@ -85,4 +85,8 @@ num_fp <- data[, ..cols][, lapply(.SD,
               function(j) (j - mean(j)) / sd(j)), .SDcols = cols]
 summary(num_fp) #check potential outliers by normalising the columns
 ```
-After we normalise all the "integer" columns, it is much easier for us identifying the outliers by inspecting the Min and Max values.  
+After we normalise all the "integer" columns, it can give us much clearer picture about how far away those outliers are. Next we will look into the relations inbetween those numeric attributes under differnt income groups. 
+
+```{r echo = FALSE}
+
+```
