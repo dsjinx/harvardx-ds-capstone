@@ -35,3 +35,58 @@ We are going to apply different but not exhaustive categories of classification 
 The following content is broken into three sections. In the data exploration part, we will explore the data in a top-down strategy, by having a broad view of the dataset structure, and break the predictor attributes into groups according to the value classes, then look for any trend or relations across those attributes. After that, we will go into algorithm details and performance in the methods details part, we will justify the reason of choosing those methods used in this report. Lastly, we will evaluate the overall performances across different methods. 
 
 ##Data Exploration
+The [Adult Census Income](www.kaggle.com/datasets/uciml/adult-census-income) dataset we use is from the 1994 Census bureau database. This dataset has the dimension of 32561 by 15, which has samples in rows, and measured variables in columns, so every single sample has 15 different attributes, and there are 32561 samples in total. 
+```{r echo  = FALSE}
+str(data)
+```
+The attributes are measured both quantitatively and qualitatively with respect to integer class and character class. The dependent variable "income" is what we are trying to predict, and it is in a qualitative form with only two different categories: "<=50K" and ">50K". This two classes element structure can help us narrow down the possible methods used will be either producing "YES" or "NO" results or giving the probability toward each category.
+```{r echo  = FALSE}
+sapply(data, function(j) class(j))
+```
+
+###Data Cleaning
+Before we explore the data in further details, we need to do some housekeeping on the data to clean out all the strange and missing values.
+Although there is no "NA", but we can see some "?" showing in "workclass", "occupation", and "native.country", but since they are all in the qualitative attributes, and recorded as character string, so we will decide the way to handle them, when we explore these attributes in details. 
+```{r}
+sum(is.na(data))
+```
+```{r echo = FALSE}
+temp <- data[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
+data.table(vars = names(temp),
+           "num of ?" = as.numeric(temp)) %>% knitr::kable()
+rm(temp)
+```
+
+###Data Visualisation
+After the inital housekeeping on the dateset, we now get into more details about the dependent variable "income", and the other 14 attributes as predictors. For the "income", samples are classified into two categories: "<=50K" and ">50K". By checking the distribution across those two income levels we can see that, the income of "<=50K" is the dominant group across all the samples with the size being 3 times of the ">50K" group, and only about 24% of the sample belongs to ">50K". 
+```{r}
+sum(data$income == "<=50K") / sum(data$income == ">50K")
+```
+```{r echp = FALSE}
+data <- data[, income := as.factor(income)]
+plot_temp <- data[, .(pct = 100 * .N / dim(data)[1]), by = .(income)]
+ggplot(plot_temp, aes(income, pct)) + 
+  geom_bar(stat = "identity", width = 0.3) + 
+  geom_text(aes(label = format(round(pct, 2), nsmall = 2)),
+            vjust = 2, color = "white")
+
+rm(plot_temp)
+```
+This unbalanced sample size can potentially make a high accuracy on predicting ">50K" income group to be more challenging than the "<=50K" ones, the reason is that we have more samples to study on with the "<=50K" group, but for under-sampled ">50K" group, if their attributes are not clustered, or lack of strong manifestation on their 14 attributes, then we can only reply on minimising the error on "<=50K" group to improve the ">50K" group accuracy. On the other hand, this can be viewed as an advantage of having only two groups of dependents. 
+
+As mentioned in above, there are two different classes of predictors: "integer" and "character", so we will look those two classes of attributes separately. We will look into the "integer" class first. 
+```{r}
+cols <- names(which(sapply(data, class) == "integer"))
+summary(data[, ..cols]) #check any strange value
+```
+The above lot of "integer" columns summary is not showing any strange numbers, except in the "capital.gain" and "capital.loss" columns are 0's for most of their statistics, it makes sense that most people are earning less than 50K/year, and most of them won't have investment asset in place. Apart from this, the column "fnlwgt" we need to highlight about its meaning in place, it is stand for "final weight", simply speaking it represents the amount of people is sharing the same attributes of the row, which that "fnlwgt" value is in. Of course the census bureau has more rigorous explanation on it, but we just want to highlight its meaning to avoid the ambiguity caused by its name having a "weight" in it. 
+```{r}
+num_fp <- data[, ..cols][, lapply(.SD, 
+              function(j) (j - mean(j)) / sd(j)), .SDcols = cols]
+summary(num_fp) #check potential outliers by normalising the columns
+```
+After we normalise all the "integer" columns, it can give us much clearer picture about how far away those outliers are. Next we will look into the relations inbetween those numeric attributes under differnt income groups. 
+
+```{r echo = FALSE}
+
+```

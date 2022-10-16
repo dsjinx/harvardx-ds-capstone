@@ -10,14 +10,18 @@ library(GGally)
 #github: 
 data <- fread("../CYO/adult.csv")
 
-#data exploration
+###########data exploration##########
 str(data)
+
+#inspect any strange and missing value
 sum(is.na(data))
 data[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
 
+#convert dependent income into two factor levels
 data <- data[, income := as.factor(income)]
 sapply(data, class)
 
+#inspect the sample distribution over the to be predicted income var
 ggplot(data, aes(x = income)) + geom_bar(width = 0.3) + 
   scale_y_log10() + labs(y = "log10(count)")
 sum(data$income == "<=50K") / sum(data$income == ">50K")
@@ -31,13 +35,13 @@ ggplot(plot_temp, aes(income, pct)) +
 ##numeric features 1st
 names(data)
 cols <- names(which(sapply(data, class) == "integer"))
-summary(data[, ..cols])
+summary(data[, ..cols]) #check for strange value
 
 num_fp <- data[, ..cols][, lapply(.SD, 
               function(j) (j - mean(j)) / sd(j)), .SDcols = cols]
-summary(num_fp)
+summary(num_fp) #check unusual outlier
 
-###check the outliers
+###check the outliers in details
 ind_min <- num_fp[, lapply(.SD, which.min)]
 ind_max <- num_fp[, lapply(.SD, which.max)]
 ind_out <- rbind(ind_min, ind_max)
@@ -50,6 +54,7 @@ outliers <- data.table(
   caplos = data$capital.loss[ind_out$capital.loss],
   weekhrs = data$hours.per.week[ind_out$hours.per.week])
 
+#plot to inspect any correlation exist across numeric features
 num_fp <- cbind(num_fp, data$income)
 
 trellis.par.set("fontsize", list(text = 8.5))
