@@ -119,7 +119,7 @@ confusionMatrix(as.factor(pred_guess), test$income, positive = ">50K")
 F_meas(as.factor(pred_guess), reference = test$income)
 
 #1. tree
-registerDoParallel(cores = 3)
+registerDoParallel(cores = 4)
 
 set.seed(2, sample.kind = "Rounding")
 ind_cv <- createFolds(1:dim(train)[1], k = 5, returnTrain = TRUE)
@@ -306,7 +306,7 @@ gauge_svm <- confusionMatrix(pred_svm, test_svm$income, positive = ">50K")
 print(gauge_svm)
 F_meas(pred_svm, reference = test_svm$income)
 
-#2nd degree polynomial kernel
+#2nd degree polynomial kernel, compare with linear kernel
 c <- c(2^-5, 1, 2^5)
 g <- c(2^-5, 1, 2^5)
 para_grid <- expand.grid(cost = c, gamma = g)
@@ -345,11 +345,65 @@ best_cg <- para_grid[which.min(tune_acc), ]
 fit_svm_poly <- svm(income ~., data = train_svm, cost = best_cg$cost, 
               gamma = best_cg$gamma, kernel = "polynomial", degree = 2)
 
-pred_svm_poly <- predict(fit_svm_poly, test_svm)
-gauge_svm_poly <- confusionMatrix(pred_svm_poly, test_svm$income, 
+polyfit_svm <- svm(income ~., data = data_digit[mini_ind,], 
+                   cost = best_cg$cost, gamma = best_cg$gamma, 
+                   kernel = "polynomial", degree = 2)
+
+polypred_svm <- predict(polyfit_svm, test_svm)
+polygauge_svm <- confusionMatrix(polypred_svm, test_svm$income, 
                                   positive = ">50K")
-print(gauge_svm_poly)
-F_meas(pred_svm_poly, reference = test_svm$income)
+print(polygauge_svm)
+F_meas(polypred_svm, reference = test_svm$income)
+
+linfit_svm <- train(income ~., data = data_digit[mini_ind,], 
+                    method = "svmLinear2", 
+                    tuneGrid = data.frame(cost = c(2^-5)))
+
+linpred_svm <- predict(linfit_svm, test_svm)
+lingauge_svm <- confusionMatrix(linpred_svm, test_svm$income, 
+                                positive = ">50K")
+print(lingauge_svm)
+F_meas(linpred_svm, reference = test_svm$income)
+#mini sample proved in high dimension predictors, linear kernel is good enough 
+#to produce a favourable result
+
+#only use numeric predictors
+numcols <- c(cols, "income")
+numtrain_svm <- data[, ..numcols][-ind,]
+numtest_svm <- data[, ..numcols][ind,]
+numfit_svm <- train(income ~., data = numtrain_svm, method = "svmLinear2",
+                    trControl = svmcontrol, 
+                    tuneGrid = data.frame(cost = c(
+                      2^-13, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
+plot(numfit_svm)
+numfit_svm
+numfit_svm$finalModel
+
+numpred_svm <- predict(numfit_svm, numtest_svm)
+numgauge_svm <- confusionMatrix(numpred_svm, numtest_svm$income, 
+                                positive = ">50K")
+print(numgauge_svm)
+F_meas(numpred_svm, reference = numtest_svm$income)
+
+#by eyeing the random forest important variables, 
+#the "race" and "native.country" is not in the top list
+#so exclude these two and try again
+imptrain_svm <- data[, -c("race", "native.country")][-ind,]
+imptest_svm <- data[, -c("race", "native.country")][ind,]
+impfit_svm <- train(income ~., data = imptrain_svm, method = "svmLinear2",
+                    trControl = svmcontrol, 
+                    tuneGrid = data.frame(cost = c(
+                      2^-13, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
+plot(impfit_svm)
+impfit_svm
+impfit_svm$finalModel
+
+imppred_svm <- predict(numfit_svm, numtest_svm)
+impgauge_svm <- confusionMatrix(numpred_svm, numtest_svm$income, 
+                                positive = ">50K")
+print(impgauge_svm)
+F_meas(imppred_svm, reference = numtest_svm$income)
+#still proves full predictor linear kernel is the best performing SVM
 
 ########try refer L177
 set.seed(19, sample.kind = "Rounding")
