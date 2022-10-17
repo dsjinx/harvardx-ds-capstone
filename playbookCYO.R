@@ -56,7 +56,7 @@ outliers <- data.table(
   weekhrs = data$hours.per.week[ind_out$hours.per.week])
 
 #plot to inspect any correlation exist across numeric features
-num_fp <- cbind(num_fp, data$income)
+num_fp <- num_fp[, income := data$income]
 
 trellis.par.set("fontsize", list(text = 8.5))
 featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "box", 
@@ -66,7 +66,7 @@ featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "box",
 featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "pairs", 
             auto.key = list(columns = 2))
 
-##categorical features
+##categorical/character features
 char_cols <- names(data)[-which(names(data) %in% cols)][-9]
 
 ###check the missing ?
@@ -77,7 +77,7 @@ mis_locate / dim(data)[1] * 100
 
 char_fp <- data[, ..char_cols]
 char_fp <- char_fp[, lapply(.SD, as.factor)] 
-char_fp <- cbind(char_fp, income = data$income)
+char_fp <- char_fp[, income := data$income]
 str(char_fp)
 sapply(char_fp, levels) #inspect any wired input
 
