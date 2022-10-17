@@ -9,6 +9,7 @@ library(GGally)
 #https://www.kaggle.com/datasets/uciml/adult-census-income
 #github: 
 data <- fread("../CYO/adult.csv")
+setwd("../CYO")
 
 ###########data exploration##########
 str(data)
