@@ -350,6 +350,12 @@ best_cg <- para_grid[which.min(tune_acc), ]
 fit_svm_poly <- svm(income ~., data = train_svm, cost = best_cg$cost, 
               gamma = best_cg$gamma, kernel = "polynomial", degree = 2)
 
+pred_svm_poly<- predict(fit_svm_poly, test_svm)
+gauge_svm_poly <- confusionMatrix(pred_svm_poly, test_svm$income, 
+                                  positive = ">50K")
+print(gauge_svm_poly)
+F_meas(pred_svm_poly, reference = test_svm$income)
+
 polyfit_svm <- svm(income ~., data = data_digit[mini_ind,], 
                    cost = best_cg$cost, gamma = best_cg$gamma, 
                    kernel = "polynomial", degree = 2)
