@@ -120,8 +120,11 @@ prev <- sum(train$income == "<=50K") / dim(train)[1]
 set.seed(10, sample.kind = "Rounding")
 pred_guess <- sample(c("<=50K", ">50K"), dim(test)[1], replace = TRUE, 
                      prob = c(prev, 1 - prev))
-confusionMatrix(as.factor(pred_guess), test$income, positive = ">50K")
-F_meas(as.factor(pred_guess), reference = test$income)
+gauge_guess <- confusionMatrix(as.factor(pred_guess), test$income, 
+                               mode = "prec_recall",
+                               positive = ">50K")
+print(gauge_guess)
+gauge_guess$byClass["F1"]
 
 #1. tree
 registerDoParallel(cores = 4)
@@ -139,9 +142,11 @@ fit_tree$finalModel
 varImp(fit_tree, scale = FALSE)
 
 pred_tree <- predict(fit_tree, test)
-gauge_tree <- confusionMatrix(pred_tree, test$income, positive = ">50K")
+gauge_tree <- confusionMatrix(pred_tree, test$income, 
+                              mode = "prec_recall",
+                              positive = ">50K")
 print(gauge_tree)
-F_meas(pred_tree, reference = test$income)
+gauge_tree$byClass["F1"]
 
 #2. random forest
 rfcontrol <- trainControl(method = "cv", index = ind_cv)
@@ -180,9 +185,11 @@ fit_forest <- train(income ~., data = train, method = "rf",
 varImp(fit_forest, scale = FALSE)
 
 pred_forest <- predict(fit_forest, test)
-gauge_forest <- confusionMatrix(pred_forest, test$income, positive = ">50K")
+gauge_forest <- confusionMatrix(pred_forest, test$income, 
+                                mode = "prec_recall",
+                                positive = ">50K")
 print(gauge_forest)
-F_meas(pred_forest, reference = test$income)
+gauge_forest$byClass["F1"]
 
 ############TRY
 set.seed(19, sample.kind = "Rounding")
@@ -307,9 +314,11 @@ fit_svm
 fit_svm$finalModel
 
 pred_svm <- predict(fit_svm, test_svm)
-gauge_svm <- confusionMatrix(pred_svm, test_svm$income, positive = ">50K")
+gauge_svm <- confusionMatrix(pred_svm, test_svm$income, 
+                             mode = "prec_recall",
+                             positive = ">50K")
 print(gauge_svm)
-F_meas(pred_svm, reference = test_svm$income)
+gauge_svm$byClass["F1"]
 
 #2nd degree polynomial kernel, compare with linear kernel
 c <- c(2^-5, 1, 2^5)
@@ -352,9 +361,10 @@ fit_svm_poly <- svm(income ~., data = train_svm, cost = best_cg$cost,
 
 pred_svm_poly<- predict(fit_svm_poly, test_svm)
 gauge_svm_poly <- confusionMatrix(pred_svm_poly, test_svm$income, 
+                                  mode = "prec_recall",
                                   positive = ">50K")
 print(gauge_svm_poly)
-F_meas(pred_svm_poly, reference = test_svm$income)
+gauge_svm_poly$byClass["F1"]
 
 polyfit_svm <- svm(income ~., data = data_digit[mini_ind,], 
                    cost = best_cg$cost, gamma = best_cg$gamma, 
@@ -362,9 +372,10 @@ polyfit_svm <- svm(income ~., data = data_digit[mini_ind,],
 
 polypred_svm <- predict(polyfit_svm, test_svm)
 polygauge_svm <- confusionMatrix(polypred_svm, test_svm$income, 
-                                  positive = ">50K")
+                                 mode = "prec_recall",
+                                 positive = ">50K")
 print(polygauge_svm)
-F_meas(polypred_svm, reference = test_svm$income)
+polygauge_svm$byClass["F1"]
 
 linfit_svm <- train(income ~., data = data_digit[mini_ind,], 
                     method = "svmLinear2", 
@@ -372,11 +383,14 @@ linfit_svm <- train(income ~., data = data_digit[mini_ind,],
 
 linpred_svm <- predict(linfit_svm, test_svm)
 lingauge_svm <- confusionMatrix(linpred_svm, test_svm$income, 
+                                mode = "prec_recall",
                                 positive = ">50K")
 print(lingauge_svm)
-F_meas(linpred_svm, reference = test_svm$income)
+lingauge_svm$byClass["F1"]
+
 #mini sample proved in high dimension predictors, linear kernel is good enough 
 #to produce a favourable result
+#also proved large sample size can improve performance
 
 #only use numeric predictors
 numcols <- c(cols, "income")
@@ -391,10 +405,11 @@ numfit_svm
 numfit_svm$finalModel
 
 numpred_svm <- predict(numfit_svm, numtest_svm)
-numgauge_svm <- confusionMatrix(numpred_svm, numtest_svm$income, 
+numgauge_svm <- confusionMatrix(numpred_svm, numtest_svm$income,
+                                mode = "prec_recall",
                                 positive = ">50K")
 print(numgauge_svm)
-F_meas(numpred_svm, reference = numtest_svm$income)
+numgauge_svm$byClass["F1"]
 
 #by eyeing the random forest important variables, 
 #the "race" and "native.country" is not in the top list
@@ -409,12 +424,15 @@ plot(impfit_svm)
 impfit_svm
 impfit_svm$finalModel
 
-imppred_svm <- predict(numfit_svm, numtest_svm)
-impgauge_svm <- confusionMatrix(numpred_svm, numtest_svm$income, 
+imppred_svm <- predict(impfit_svm, imptest_svm)
+impgauge_svm <- confusionMatrix(imppred_svm, imptest_svm$income, 
+                                mode = "prec_recall",
                                 positive = ">50K")
 print(impgauge_svm)
-F_meas(imppred_svm, reference = numtest_svm$income)
-#still proves full predictor linear kernel is the best performing SVM
+impgauge_svm$byClass["F1"]
+
+#impsvm is best, slightly better than full predictor linear svm
+#??table to summarise svm results
 
 ########try refer L177
 set.seed(19, sample.kind = "Rounding")
@@ -480,11 +498,26 @@ fit_glm <- train(income ~., data = train_svm, method = "glm",
 fit_glm$finalModel #?
 
 pred_glm <- predict(fit_glm, test_svm)
-gauge_glm <- confusionMatrix(pred_glm, test_svm$income, positive = ">50K")
+gauge_glm <- confusionMatrix(pred_glm, test_svm$income, 
+                             mode = "prec_recall",
+                             positive = ">50K")
 print(gauge_glm)
-F_meas(pred_glm, reference = test_svm$income)
+gauge_glm$byClass["F1"]
+
+impfit_glm <- train(income ~., data = imptrain_svm, method = "glm", 
+                 family = binomial)
+impfit_glm$finalModel #?
+
+imppred_glm <- predict(impfit_glm, imptest_svm)
+impgauge_glm <- confusionMatrix(imppred_glm, imptest_svm$income, 
+                             mode = "prec_recall",
+                             positive = ">50K")
+print(impgauge_glm)
+impgauge_glm$byClass["F1"] #about the same
+#??table summarise glm
 
 #5. ensemble
+##caretEnsemble pkg does not recognise symbols, need to be replaced by charc
 cnvt_income <- train_svm[, lapply(.SD, 
                              function (j) str_replace(j, "\\>", "gt")), 
                              .SDcols = c("income")]
@@ -497,21 +530,73 @@ cnvtst_income <- test_svm[, lapply(.SD,
 cnvtst_income <- cnvtst_income[, lapply(.SD, 
                             function(j) str_replace(j, "\\<=", "loe"))]
 
-train_svm[, income := cnvt_income]
+train_svm[, income := cnvt_income] 
 test_svm[, income := cnvtst_income]
 
+##make sure rf is still consistence in the digitised dataset
+enfit_rf <- train(income ~., data = train_svm, trControl = rfcontrol,
+                  method = "rf", tuneGrid = data.frame(mtry = best_mtry),
+                  nodesize = best_node, ntree = best_ntree)
+enpred_rf <- predict(enfit_rf, test_svm)
+engauge_rf <- confusionMatrix(enpred_rf, as.factor(test_svm$income), 
+                              mode = "prec_recall",
+                              positive = "gt50K")
+engauge_rf$byClass["F1"]
+
+##re-tune the rf with the digitised dateset
+entune_rf <- train(income ~., data = train_svm, method = "rf",
+                     trControl = rfcontrol, 
+                     tuneGrid = data.frame(mtry = seq(1, 5, 1)))
+plot(entune_rf)
+entune_rf
+entune_rf$finalModel
+enbest_mtry <- entune_rf$bestTune$mtry
+
+en_nodes <- seq(1, 20, 2)
+entune_nds <- sapply(en_nodes, function(nd){
+  train(income ~., data = train_svm, method = "rf",
+        trControl = rfcontrol,
+        tuneGrid = data.frame(mtry = enbest_mtry),
+        nodesize = nd)$results$Accuracy
+})
+qplot(en_nodes, entune_nds, geom = c("point", "line"))
+enbest_node <- en_nodes[which.max(entune_nds)]
+
+en_ntrees <- seq(10, 200, 10)
+entune_ntree <- sapply(en_ntrees, function(nt){
+  train(income ~., data = train_svm, method = "rf",
+        trControl = rfcontrol,
+        tuneGrid = data.frame(mtry = enbest_mtry),
+        nodesize = enbest_node,
+        ntree = nt)$results$Accuracy})
+qplot(en_ntrees, entune_ntree, geom = c("point", "line"))
+enbest_ntree <- ntrees[which.max(entune_ntree)]
+
+enfit_forest <- train(income ~., data = train_svm, method = "rf",
+                    tuneGrid = data.frame(mtry = enbest_mtry),
+                    nodesize = enbest_node,
+                    ntree = enbest_ntree)
+varImp(enfit_forest, scale = FALSE)
+
+enpred_forest <- predict(enfit_forest, test_svm)
+engauge_forest <- confusionMatrix(enpred_forest, as.factor(test_svm$income), 
+                                  mode = "prec_recall",
+                                  positive = "gt50K")
+engauge_forest$byClass["F1"] #better than pre retuned
+
+##now ensemble
 crEnsem <- trainControl(method = "cv", index = ind_cv, 
                         savePredictions = "final", classProbs = TRUE)
 ensemble_fit <- caretList(income ~., data = train_svm, trControl = crEnsem,
                           tuneList = list(
                           svm = caretModelSpec(method = "svmLinear2", 
-                                  tuneGrid = data.frame(cost = 32)),
+                                  tuneGrid = data.frame(cost = 0.03125)),
                           glm = caretModelSpec(method = "glm", 
                                   family = binomial),
                           rf = caretModelSpec(method = "rf", 
-                                  tuneGrid = data.frame(mtry = best_mtry),
-                                  nodesize = best_node,
-                                  ntree = best_ntree)))
+                                  tuneGrid = data.frame(mtry = enbest_mtry),
+                                  nodesize = enbest_node,
+                                  ntree = enbest_ntree)))
 
 modelCor(resamples(ensemble_fit))
 
@@ -519,10 +604,11 @@ stack <- caretStack(ensemble_fit, method = "glm",
                     trControl = trainControl(method = "boot", number = 5, 
                                              savePredictions = "final"))
 pred_stack <- predict(stack, test_svm)
-gauge_stack <- confusionMatrix(stack_pred, as.factor(test_svm$income), 
-                             positive = "gt50K")
+gauge_stack <- confusionMatrix(pred_stack, as.factor(test_svm$income), 
+                               mode = "prec_recall",
+                               positive = "gt50K")
 print(gauge_stack)
-F_meas(pred_stack, as.factor(test_svm$income))
+gauge_stack$byClass["F1"]
 
 #######
 "Error: At least one of the class levels is not a valid R variable name; 
