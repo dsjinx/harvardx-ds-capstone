@@ -15,6 +15,7 @@ library(doParallel)
 library(e1071)
 library(caretEnsemble)
 library(GGally)
+
 ```
 ```{r eval = FALSE}
 #libraries are used in this report
@@ -154,7 +155,7 @@ rm(ggp1, ggp2, ggp3, char_fp, mis_locate, num_fp)
 ```
 
 ##Methods Details
-After the above visual understanding about the dataset, straightaway we can narrow down the methods selections down to trees, because the trees family can effectively handle different classes of variables, no matter they are numbers or character strings. So we will use a single tree method first, then use a forest method to compare how much better the result can be. But before everything we will utilise the dominance class phenomenon in the sample dependents "income" to make predictions based on purely guessing, we can use this dummy algorithm result as our benchmark to measure the other attending methods performances. 
+After the above visual understanding about the dataset, straightaway we can narrow down the methods selections down to trees, because the tree family can effectively handle different classes of variables, no matter they are numbers or character strings. So we will use a single tree method first, then use a forest method to compare how much better the result can be. But before everything we will utilise the dominance class phenomenon in the sample dependents "income" to make predictions based on purely guessing, we can use this dummy algorithm result as our benchmark to measure the other attending methods performances. 
 
 ###0. Guessing
 We are breaking the original dataset into a 8/2 fraction of train/test set first, and use the prevalence of the dominant group of "<=50" in the training set "income" column to toss a highly biased coin with faces of "<=50K" and ">50K", we will toss the coin for the times equal the number of samples we are guessing for in the test set. 
@@ -181,4 +182,12 @@ gauge_guess <- confusionMatrix(as.factor(pred_guess), test$income,
 print(gauge_guess)
 gauge_guess$byClass["F1"]
 ```
-We get a $F_1$ score of 
+We get a $F_1$ score of 0.246413 by tossing the coin, and this will be our benchmark of performance, we are expecting all the proper algorithms in below to have a substantial improvement above this baseline. By looking at the above performance stats from guessing, it proves that the accuracy is very biased performance metric has 0.629, which is a consequence of dominant dependent in test set. The kappa value of 4e-04 is telling us this accuracy is nothing different from coincidence. If we guess everyone is "<=50K", we can even get a much higher accuracy of 0.7571012. 
+```{r}
+sum(test$income == "<=50K") / dim(test)[1]
+```
+###1. One tree
+Now we are turning to train and test with property algorithms. We will start with a single CART tree by using the "rpart" package. According to the package vignettes, there are a list of parameters can be tuned to affect the trained model performance in the test set, but the most effective one is complexity parameter "cp" [@r-rpart]. It is the parameter to decide how the tree is going to be pruned from the default tree, which is grown by the set of system default parameters. the "cp" value is meant to be in the range of [0, 1], when "cp" = 1 then the tree will be a stick with no branch at all, and the "cp" = 0 could cause the tree to have the number of branches to be the total number of elements in the dataset - 1, alternatively it is to be said the model is very over trained. We will just use the default value for minimum number of samples to cause further branch split, and also for the minimum samples to be in a terminal node. The "raprt" package can also handle missing values by setting some rules with a set of surrogate parameters, although we have some small fraction of predictor variables are missing and recorded in "?", we will arbitrarily treat them as a valid value class, since they are all recorded as character string inside the character class cokumns 
+```{r eval = FALSE}
+
+```
