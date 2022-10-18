@@ -181,4 +181,4 @@ gauge_guess <- confusionMatrix(as.factor(pred_guess), test$income,
 print(gauge_guess)
 gauge_guess$byClass["F1"]
 ```
-
+We get a $F_1$ score of 
