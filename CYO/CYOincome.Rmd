@@ -146,7 +146,7 @@ ggp3 <- lapply(7:8, function(j){
 })
 ggmatrix(ggp3, nrow = 1, ncol = 2, xAxisLabels = char_cols[7:8])
 ```
-So after going through those attributes visually, at least by human eyes, we can not set any model up to predict the two income groups effectively. But at least, these visual information can help us choose the possible working methods, which could be effective to handle those not strongly featured data. 
+So after going through those attributes visually, at least by human eyes, we can not set any model up to classify the two income groups effectively. But at least, these visual information can help us choose the possible working methods, which could be effective to handle those not strongly featured data. 
 
 ```{r echo = FALSE}
 #clean out the memory
@@ -154,5 +154,31 @@ rm(ggp1, ggp2, ggp3, char_fp, mis_locate, num_fp)
 ```
 
 ##Methods Details
+After the above visual understanding about the dataset, straightaway we can narrow down the methods selections down to trees, because the trees family can effectively handle different classes of variables, no matter they are numbers or character strings. So we will use a single tree method first, then use a forest method to compare how much better the result can be. But before everything we will utilise the dominance class phenomenon in the sample dependents "income" to make predictions based on purely guessing, we can use this dummy algorithm result as our benchmark to measure the other attending methods performances. 
 
+###0. Guessing
+We are breaking the original dataset into a 8/2 fraction of train/test set first, and use the prevalence of the dominant group of "<=50" in the training set "income" column to toss a highly biased coin with faces of "<=50K" and ">50K", we will toss the coin for the times equal the number of samples we are guessing for in the test set. 
+```{r eval = FALSE}
+#break data into 8/2 train/test set
+set.seed(1, sample.kind = "Rounding")
+ind <- createDataPartition(1:dim(data)[1], times = 1, list = FALSE, p = 0.2)
+train <- data[-ind, ]
+test <- data[ind, ]
+
+#0. guessing
+#chance of seeing <=50k in training set
+prev <- sum(train$income == "<=50K") / dim(train)[1] 
+
+#use the <=50k chance to toss coin for dim(test)[1] number of times
+set.seed(10, sample.kind = "Rounding")
+pred_guess <- sample(c("<=50K", ">50K"), dim(test)[1], replace = TRUE, 
+                     prob = c(prev, 1 - prev)) 
+gauge_guess <- confusionMatrix(as.factor(pred_guess), test$income, 
+                               mode = "prec_recall",
+                               positive = ">50K")
+```
+```{r echo = FALSE}
+print(gauge_guess)
+gauge_guess$byClass["F1"]
+```
 
