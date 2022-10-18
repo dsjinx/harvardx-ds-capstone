@@ -186,8 +186,99 @@ We get a $F_1$ score of 0.246413 by tossing the coin, and this will be our bench
 ```{r}
 sum(test$income == "<=50K") / dim(test)[1]
 ```
-###1. One tree
-Now we are turning to train and test with property algorithms. We will start with a single CART tree by using the "rpart" package. According to the package vignettes, there are a list of parameters can be tuned to affect the trained model performance in the test set, but the most effective one is complexity parameter "cp" [@r-rpart]. It is the parameter to decide how the tree is going to be pruned from the default tree, which is grown by the set of system default parameters. the "cp" value is meant to be in the range of [0, 1], when "cp" = 1 then the tree will be a stick with no branch at all, and the "cp" = 0 could cause the tree to have the number of branches to be the total number of elements in the dataset - 1, alternatively it is to be said the model is very over trained. We will just use the default value for minimum number of samples to cause further branch split, and also for the minimum samples to be in a terminal node. The "raprt" package can also handle missing values by setting some rules with a set of surrogate parameters, although we have some small fraction of predictor variables are missing and recorded in "?", we will arbitrarily treat them as a valid value class, since they are all recorded as character string inside the character class cokumns 
-```{r eval = FALSE}
 
+###1. One tree
+Now we are turning to train and test with property algorithms. We will start with a single CART tree by using the "rpart" package. According to the package vignettes, there are a list of parameters can be tuned to affect the trained model performance in the test set, but the most effective one is complexity parameter "cp" [@r-rpart]. It is the parameter to decide how the tree is going to be pruned from the default tree, which is grown by the set of system default parameters. the "cp" value is meant to be in the range of [0, 1], when "cp" = 1 then the tree could be a stick with no branch at all, which can be said to be very under trained. When the "cp" = 0 could cause the tree to have the number of branches to be the total number of elements in the dataset - 1, alternatively it is to be said the model is very over trained. We will just use the default value for minimum number of samples to cause further branch split, and also for the minimum samples to be in a terminal node. The "raprt" package can also handle missing values by setting some rules with a set of surrogate parameters, although we have some small fraction of predictor variables are missing and recorded in "?", we will arbitrarily treat them as a valid value class, since they are all recorded as character string inside the character class columns 
+```{r eval = FALSE}
+registerDoParallel(cores = 4) 
+#caret can parallel the process to speed up the training
+
+set.seed(2, sample.kind = "Rounding")
+ind_cv <- createFolds(1:dim(train)[1], k = 5, returnTrain = TRUE)
+
+#define the cross validation index can make the result to be reproducible
+treecontrol <- trainControl(method = "cv", index = ind_cv)
+fit_tree <- train(income ~ ., data = train, method = "rpart",
+              trControl = treecontrol, 
+              tuneGrid = data.frame(cp = seq(0, 0.1, length.out = 10)))
 ```
+```{r echo = FALSE}
+plot(fit_tree)
+```
+```{r echo = FALSE}
+fit_tree$finalModel
+```
+The cross validation results suggest when "cp" = 0.01111111, the model can provide us a favourable result. From the printing of the final mode, it shows our final tree has six leaf nodes or terminal nodes. In those leafs we can see that the majority of the classifiers are the capital gain and loss, which just coincide with our visual findings in above. 
+```{r eval = FALSE}
+pred_tree <- predict(fit_tree, test)
+gauge_tree <- confusionMatrix(pred_tree, test$income, 
+                              mode = "prec_recall",
+                              positive = ">50K")
+```
+```{r echo = FALSE}
+print(gauge_tree)
+gauge_tree$byClass["F1"]
+```
+The final $F_1$ score of our single tree is 0.6372981, which is very encouraging comparing to 0.246413 of the guessing benchmark, that is 158% improvement. And the kappa ratio 0.5445 is telling us our higher over all accuracy is not by chance. 
+
+###2. Forest
+Since we have tried the tree method, then the forest method can not be ignored in the tree family. As stated in Prof. Irizarry's text, random forests can improve the single decision tree performance by bagging on multiple smaller trees [@irizarry_2022]. The logic behind the bagging is that, instead of growing one tree out of all the available 14 predictors, we randomly pick "mtry" number of predictors to grow "ntree" number of small trees, the size of the trees is defined by the "nodesize", with smaller trees having larger "nodesize". So with the central idea of bagging, we would avoid to have the situation we faced in above single tree, where very few predictors "capital gain" and "capital loss" dominate the decision rules. This could be a sign of under training. And there also could be case of over training in a tree, if the rule of branch splitting is too granular, the bagging method can also accommodate this situation. 
+
+As we described in above, we will tune our "randomForest" with three major parameters: "mtry", "nodesize", "ntree" sequentially. 
+```{r eval = FALSE}
+#tune the mtry 1st to decide how many predictors for each trees
+#same cv index from the tree
+rfcontrol <- trainControl(method = "cv", index = ind_cv)
+tune_forest <- train(income ~., data = train, method = "rf",
+                    trControl = rfcontrol, 
+                    tuneGrid = data.frame(mtry = seq(2, 14, 2)))
+```
+```{r echo = FALSE}
+plot(tune_forest)
+```
+```{r echo = FALSE}
+tune_forest
+```
+```{r eval = FALSE}
+#tune the nodesize to decide how big the leaf size
+nodesize <- seq(1, 20, 2)
+tune_nds <- sapply(nodesize, function(nd){
+  train(income ~., data = train, method = "rf",
+        trControl = rfcontrol,
+        tuneGrid = data.frame(mtry = best_mtry),
+        nodesize = nd)$results$Accuracy
+})
+```
+```{r echo = FALSE}
+qplot(nodesize, tune_nds, geom = c("point", "line"))
+```
+```{r eval = FALSE}
+#tune the number of trees in the forest
+ntrees <- seq(10, 200, 10)
+tune_ntree <- sapply(ntrees, function(nt){
+  train(income ~., data = train, method = "rf",
+        trControl = rfcontrol,
+        tuneGrid = data.frame(mtry = best_mtry),
+        nodesize = best_node,
+        ntree = nt)$results$Accuracy})
+```
+```{r echo = FALSE}
+qplot(ntrees, tune_ntree, geom = c("point", "line"))
+```
+The above turning process suggest that the optimised forest is composed by "ntrees" = 180 trees, the minimum leaf size "nodesize" = 3, which means the trees in the forest are quite large, and the number of predictors "mtry" we use to grow each tree is equal to 12, almost include all the 14 available ones. Then we check on the test set performance in below. 
+```{r eval = FALSE}
+fit_forest <- train(income ~., data = train, method = "rf",
+                     tuneGrid = data.frame(mtry = best_mtry),
+                     nodesize = best_node,
+                     ntree = best_ntree)
+
+pred_forest <- predict(fit_forest, test)
+gauge_forest <- confusionMatrix(pred_forest, test$income, 
+                                mode = "prec_recall",
+                                positive = ">50K")
+```
+```{r echo = FALSE}
+print(gauge_forest)
+gauge_forest$byClass["F1"]
+```
+The final $F_1$ score 0.6908837 does meet our initial expectation of achieving a better performance than the single tree in before, although the improvement is very limited for just over 8%. In next we will jump out of trees family, to try another 

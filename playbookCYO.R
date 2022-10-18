@@ -130,9 +130,10 @@ gauge_guess$byClass["F1"]
 #1. tree
 registerDoParallel(cores = 4)
 
-set.seed(2, sample.kind = "Rounding")
+set.seed(2, sample.kind = "Rounding") #5 fold cv
 ind_cv <- createFolds(1:dim(train)[1], k = 5, returnTrain = TRUE)
 
+#define the cv index can make the train to be reproducible
 treecontrol <- trainControl(method = "cv", index = ind_cv)
 fit_tree <- train(income ~ ., data = train, method = "rpart",
               trControl = treecontrol, 
@@ -140,7 +141,7 @@ fit_tree <- train(income ~ ., data = train, method = "rpart",
 plot(fit_tree)
 fit_tree
 fit_tree$finalModel
-varImp(fit_tree, scale = FALSE)
+varImp(fit_tree, scale = FALSE) #get an idea of important predictors
 
 pred_tree <- predict(fit_tree, test)
 gauge_tree <- confusionMatrix(pred_tree, test$income, 
@@ -150,14 +151,15 @@ print(gauge_tree)
 gauge_tree$byClass["F1"]
 
 #2. random forest
+#same cv index from the tree
 rfcontrol <- trainControl(method = "cv", index = ind_cv)
 tune_forest <- train(income ~., data = train, method = "rf",
                     trControl = rfcontrol, 
                     tuneGrid = data.frame(mtry = seq(2, 14, 2)))
 plot(tune_forest)
 tune_forest
-tune_forest$finalModel
-best_mtry <- tune_forest$bestTune$mtry
+best_mtry <- tune_forest$bestTune$mtry 
+#tune the mtry 1st to decide how many predictors for each trees
 
 nodesize <- seq(1, 20, 2)
 tune_nds <- sapply(nodesize, function(nd){
@@ -168,6 +170,7 @@ tune_nds <- sapply(nodesize, function(nd){
 })
 qplot(nodesize, tune_nds, geom = c("point", "line"))
 best_node <- nodesize[which.max(tune_nds)]
+#tune the nodesize to decide how big the leaf size
 
 ntrees <- seq(10, 200, 10)
 tune_ntree <- sapply(ntrees, function(nt){
@@ -178,12 +181,13 @@ tune_ntree <- sapply(ntrees, function(nt){
         ntree = nt)$results$Accuracy})
 qplot(ntrees, tune_ntree, geom = c("point", "line"))
 best_ntree <- ntrees[which.max(tune_ntree)]
+#tune the number of trees in the forest
 
 fit_forest <- train(income ~., data = train, method = "rf",
                      tuneGrid = data.frame(mtry = best_mtry),
                      nodesize = best_node,
                      ntree = best_ntree)
-varImp(fit_forest, scale = FALSE)
+varImp(fit_forest, scale = FALSE) #to see what criteria used in trees
 
 pred_forest <- predict(fit_forest, test)
 gauge_forest <- confusionMatrix(pred_forest, test$income, 
