@@ -10,6 +10,7 @@ library(GGally)
 #github: 
 data <- fread("../CYO/adult.csv")
 setwd("../CYO")
+ogdata <- fread("adult.csv")
 
 ###########data exploration##########
 str(data)

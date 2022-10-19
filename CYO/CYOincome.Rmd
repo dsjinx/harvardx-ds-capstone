@@ -7,15 +7,13 @@ bibliography: CYOref.bib
 ---
 
 ```{r include = FALSE}
-#these pkgs used for generating report
+#these pkgs and file used for generating report
 library(tidyverse)
 library(data.table)
 library(caret)
-library(doParallel)
 library(e1071)
-library(caretEnsemble)
 library(GGally)
-
+load("~/git-repos/harvardx-ds-capstone/CYO/fullrun.RData")
 ```
 ```{r eval = FALSE}
 #libraries are used in this report
@@ -26,6 +24,7 @@ library(doParallel)
 library(e1071)
 library(caretEnsemble)
 library(GGally)
+#??data
 ```
 ##Executive Summary
 This report is going to apply different methods for achieving a good $F_1$ score on the target income class out of all the surveyed candidates. The used Adult Income Census dataset has two income classes: "<= 50K", ">50K". The goal is to successfully predict all the ">50K" income samples in the testset. But the challenge is the class dominance of "<=50K", which made the ">50K" class to be short-sampled, so it is hard to achieve a good accuracy of ">50K" class. The methods used in this report include CART (classification and regression tree), random forest, SVM (support vector machine), and logistic regression. The best performing individual method is ??? with a $F_1$ score of ???. In addition, the stacking method is used to combine the tuned random forest, SVM, and GLM, and the achieved $F_1$ score is ????. The results indicate that the .... is the best performing method in this dateset.
@@ -281,4 +280,237 @@ gauge_forest <- confusionMatrix(pred_forest, test$income,
 print(gauge_forest)
 gauge_forest$byClass["F1"]
 ```
-The final $F_1$ score 0.6908837 does meet our initial expectation of achieving a better performance than the single tree in before, although the improvement is very limited for just over 8%. In next we will jump out of trees family, to try another 
+The final $F_1$ score 0.6908837 does meet our initial expectation of achieving a better performance than the single tree in before, although the improvement is very limited for just over 8%. In next we will jump out of trees family, to try another approach in a more linear algebra way, which is the Support Vector Machine (SVM). 
+
+###3. Support Vector Machine
+Broadly speaking the SVM is to search a hyperplane that can effectively separate two different class samples in the attributes space. In our case each row of the dataset represents a surveyed sample, which has 14 attributes dimensions, so we are searching a hyperplane inside a 14 dimension space. Intuitively this hyperplane should have the dimension of 13, because in a x-y 2 dimension, it is a single line, and in a x-y-z 3 dimensional space, it is a 2 dimensional plane. According to the original paper, this hyperplane is spanned by the selective vectors out of the whole dataset [@Cortes1995]. What it means is that, we believe the two class samples are clustering toward two opposite directions, and those samples at the joint border of the two clusters are considered as supporting vectors. 
+
+There are two popular SVM packages in R, and we use the LIBSVM based "e1071" package, the LIBSVM is created and maintained by the team from National Taiwan University. We need to tune the model based on the chosen kernel. According to the package document, if the samples are in high dimensions, then the most basic linear kernel would be the best performing choice [@CC01a]. So we will turn the model with linear kernel first, then try different kernel and approaches to check, whether the basic linear model is the best choice for our purpose. 
+
+Before train the model, we need to make our dataset to fit the algorithm, because the algorithm only works on quantitative data, but not qualitative data. For all the qualitative attributes columns, there are two options to digitise them, one option is to use the 'dummyVars' function in 'caret' can turn those columns values into binary values, and creating a new column for every categorical data value in the origin dataset. For example, in the "education" column, we have 15 different categories of data in place. 
+```{r echo = FALSE}
+ogdata <- fread("adult.csv")
+unique(ogdata$education)
+rm(ogdata)
+```
+The function 'dummyVars' will create another 15 new columns with the names being those qualitative values. If we use this function on all the 8 qualitative attributes columns, we will have lots of 0's in our new dataset, which means we get a huge sparse dataset. High sparsity could become another risk for our model. The central idea of pre-processing and data cleaning is to fit in the algorithm, and improve the performance, so we will take another approach for those qualitative values. Our approach is to digitise them locally, use the same "education" column example, we will simply mark them with digits accordingly with their positions index in the result of 'uniqueN' function. For the "?", we will force them to be 0, regardless of their position index, so for the three columns have the "?" values, we will treat them a little differently. 
+```{r eval = FALSE}
+##digitise all categorical columns
+data_digit <- data[, ..char_cols]
+sapply(data_digit, uniqueN)
+sapply(data_digit, unique)
+
+data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
+
+data_digit <- data_digit[, 
+              lapply(.SD, function(j) str_replace(j, "\\?", "0"))]
+
+data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
+data_digit[, lapply(.SD, function(j) sum(str_detect(j, "0")))]
+
+unique(data_digit$education)
+sum(str_detect(data_digit$education, "10th"))
+
+sapply(data_digit, unique)
+
+##containing "?" cols set them to be "0"
+wc <- 1:uniqueN(data_digit$workclass)
+for(w in wc){data_digit$workclass[which(data_digit$workclass == 
+                    unique(data_digit$workclass)[w])] <- wc[w] - 1}
+rm(w, wc)
+
+oc <- 1:uniqueN(data_digit$occupation)
+for(o in oc){data_digit$occupation[which(data_digit$occupation == 
+                    unique(data_digit$occupation)[o])] <- oc[o] - 1}
+rm(o, oc)
+
+#"0" is in 2nd place of uniqueN(), special treatment convert "2" -> "0"
+nc <- 1:uniqueN(data_digit$native.country)
+for(n in nc){data_digit$native.country[which(data_digit$native.country == 
+                    unique(data_digit$native.country)[n])] <- nc[n]}
+data_digit$native.country[which(data_digit$native.country == "2")] <- 0
+rm(n, nc)
+
+ed <- 1:uniqueN(data_digit$education)
+for(e in ed){data_digit$education[which(data_digit$education == 
+                    unique(data_digit$education)[e])] = ed[e]}
+rm(e, ed)
+
+ms <- 1:uniqueN(data_digit$marital.status)
+for(m in ms){data_digit$marital.status[which(data_digit$marital.status == 
+                    unique(data_digit$marital.status)[m])] = ms[m]}
+rm(m, ms)
+
+rl <- 1:uniqueN(data_digit$relationship)
+for(r in rl){data_digit$relationship[which(data_digit$relationship == 
+                    unique(data_digit$relationship)[r])] = rl[r]}
+rm(r, rl)
+
+rc <- 1:uniqueN(data_digit$race)
+for(r in rc){data_digit$race[which(data_digit$race == 
+                    unique(data_digit$race)[r])] = rc[r]}
+rm(r, rc)
+
+sx <- 1:uniqueN(data_digit$sex)
+for(s in sx){data_digit$sex[which(data_digit$sex == 
+                    unique(data_digit$sex)[s])] = sx[s]}
+rm(s, sx)
+
+data_digit <- data_digit[, lapply(.SD, as.numeric)]
+data_digit <- data[, (char_cols) := data_digit]
+str(data_digit)
+
+#same partition index from trees
+train_svm <- data_digit[-ind, ]
+test_svm <- data_digit[ind, ]
+```
+After we have the data ready, we will turn the model next. Because we are using the linear kernel first, the only parameter we need to tune is the "cost". This parameter is acting as the Lagrange multiplier in the to be solved dual problem [@Cortes1995]. Geometrically it is the trade-off margin of our optimised hyperplane, because of course we will not get the ideal dataset, whose two classes samples are perfectly separable, so we also call this hyperplane as the soft margin hyperplane, which allows training errors within a boundary of [0, Cost] [@Cortes1995, @smo]. 
+```{r eval = FALSE}
+#use the same cv index from trees to make the training process reproducible
+svmcontrol <- trainControl(method = "cv", index = ind_cv)
+fit_svm <- train(income ~., data = train_svm, method = "svmLinear2",
+                 trControl = svmcontrol, 
+                 tuneGrid = data.frame(cost = c(
+                      2^-13, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
+
+pred_svm <- predict(fit_svm, test_svm)
+gauge_svm <- confusionMatrix(pred_svm, test_svm$income, 
+                             mode = "prec_recall",
+                             positive = ">50K")
+```
+```{r echo = FALSE}
+print(gauge_svm)
+gauge_svm$byClass["F1"]
+```
+The final $F_1$ score 0.6290499 is certainly favourable comparing to the guessing benchmark, but is not as good as the two tree methods in above. This result makes us to doubt our choice of linear kernel, so we try to map our data with a 2nd degree polynomial kernel to compare the performance. The general idea about kernel is mapping the data into a higher dimension, which can effectively solve the low dimension data, but our data are in a 14 dimension space already, so we chose the linear kernel first. 
+
+In addition to the "cost" parameter, there is one more parameter "gamma" need to be turned. The "gamma" is a scalar coefficient that scales the output value of the the kernel. The kernel function in below is showing a 2nd degree polynomial, and the $\vec{x_i}$ and $\vec{x_j}$ are any two different sample points in the dataset, the r is a constant set as 0 in default, and we just use the r = 0 as default in our case. As stated in above, the purpose of 2nd or higher dimension kernel is to help solve the low dimension data, so we will prudently apply the 2nd degree instead of higher ones for our 14 dimensional sample data. 
+$$
+K_{poly} = (\gamma(\vec{x_i}\cdot \vec{x_j})+r)^2
+$$
+Instead of tune these two parameters sequentially, we will tune them in a grid structure. With the 'expand.grid' function we can have create a "cost" choices time "gamma" choices pairs of values to be trained with the cross validation. We also use a mini set to train the linear and polynomial kernels at the same time, because the polynomial kernel actually increase the computation cost exponentially. We take 20% of the original data with the same proportion of two different income groups, by mimicking the dependent distribution we can make sure the polynomial kernel is also tested in a unbalanced sampling environment. At the end, we test these two mini set trained SVM on the full size test set to compare their performances. 
+```{r eval = FALSE}
+#2nd degree polynomial kernel, compare with linear kernel
+c <- c(2^-5, 1, 2^5)
+g <- c(2^-5, 1, 2^5)
+para_grid <- expand.grid(cost = c, gamma = g)
+
+#mini tuning cv set, mimic the income class distribution from original dataset
+under_ind <- which(data$income == "<=50K")
+above_ind <- which(data$income == ">50K")
+
+set.seed(3, sample.kind = "Rounding")
+mini_under <- sample(under_ind, length(under_ind) * 0.2, 
+                     replace = FALSE)
+set.seed(4, sample.kind = "Rounding")
+mini_above <- sample(above_ind, length(above_ind) * 0.2,
+                     replace = FALSE)
+mini_ind <- c(mini_under, mini_above)
+
+#create the 5-fold cv sets 
+set.seed(5, sample.kind = "Rounding")
+mini_cv <- createFolds(mini_ind, k = 5, returnTrain = TRUE)
+mini_cv_ind <- lapply(1:5, function(k) mini_ind[mini_cv[[k]]])
+
+tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame, 
+                   .packages = "e1071") %:% 
+  foreach(k = 1:5, .combine = c) %dopar% {
+    cv_train <- svm(income ~., data = data_digit[mini_cv_ind[[k]],], 
+                    cost = para_grid[j, 1], gamma = para_grid[j, 2], 
+                    kernel = "polynomial", degree = 2)
+    val_acc <- sum(predict(cv_train, data_digit[-mini_cv_ind[[k]],]) == 
+      data_digit[-mini_cv_ind[[k]],]$income) / 
+      dim(data_digit[-mini_cv_ind[[k]],])[1]
+  }
+
+tune_acc <- apply(tune_cg, 2, mean)
+best_cg <- para_grid[which.min(tune_acc), ]
+```
+```{r echo = FALSE}
+qplot(1:dim(tune_cg)[2], tune_acc, geom = c("point", "line"))
+```
+```{r eval = FALSE}
+#test the mini set trained polynomial kernel
+polyfit_svm <- svm(income ~., data = data_digit[mini_ind,], 
+                   cost = best_cg$cost, gamma = best_cg$gamma, 
+                   kernel = "polynomial", degree = 2)
+
+polypred_svm <- predict(polyfit_svm, test_svm)
+polygauge_svm <- confusionMatrix(polypred_svm, test_svm$income, 
+                                 mode = "prec_recall",
+                                 positive = ">50K")
+```
+```{r echo = FALSE}
+print(polygauge_svm)
+polygauge_svm$byClass["F1"]
+```
+```{r eval = FALSE}
+#test the linear kernel on the mini set too
+#but use the tuned "cost" from the previous full train set
+linfit_svm <- train(income ~., data = data_digit[mini_ind,], 
+                    method = "svmLinear2", 
+                    tuneGrid = data.frame(cost = c(2^-5)))
+
+linpred_svm <- predict(linfit_svm, test_svm)
+lingauge_svm <- confusionMatrix(linpred_svm, test_svm$income, 
+                                mode = "prec_recall",
+                                positive = ">50K")
+```
+```{r echo = FALSE}
+print(lingauge_svm)
+lingauge_svm$byClass["F1"]
+```
+The two $F_1$ scores of the results are 0.3573548 for 2nd degree polynomial, and 0.5908739 for linear, are proving our original belief that, linear kernel is better than higher dimensional mapping kernels in an already high dimensional sample space. In next, we question ourselves that, because the SVM was designed to solve the purely numeric attributes samples in a vector space, but we have many qualitative attributes, even we have preprocessed them into numbers, those numbers are rather out of nowhere dummy indexes without proper meanings. Then we want to test out, if we just train the linear kernel on those quantitative attributes, will we get a better performance. 
+```{r eval = FALSE}
+#only use numeric predictors
+numcols <- c(cols, "income")
+numtrain_svm <- data[, ..numcols][-ind,]
+numtest_svm <- data[, ..numcols][ind,]
+
+numfit_svm <- train(income ~., data = numtrain_svm, method = "svmLinear2",
+                    trControl = svmcontrol, 
+                    tuneGrid = data.frame(cost = c(
+                      2^-13, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
+plot(numfit_svm)
+numfit_svm
+numfit_svm$finalModel
+
+numpred_svm <- predict(numfit_svm, numtest_svm)
+numgauge_svm <- confusionMatrix(numpred_svm, numtest_svm$income,
+                                mode = "prec_recall",
+                                positive = ">50K")
+```
+```{r echo = FALSE}
+print(numgauge_svm)
+numgauge_svm$byClass["F1"]
+```
+The resulting $F_1$ score is only 0.4123134, much worse than the full attribute linear model, so it means the way we treat the qualitative attributes are working. In next, we will try optimise our attributes selections to train the linear kernel again, and see whether the approach can bring us any improvement on the result. The motivation is from the tree family, for example the random forest trained results suggest that "race" and "native.country" are not top import attributes to make the classification, so we will try to exclude these two attribute columns in our linear svm, to see whether a better result can be obtained. 
+```{r echo = FALSE}
+varImp(fit_forest, scale = FALSE)
+```
+```{r eval = FALSE}
+#exclude the race and native columns in predictor and train again
+imptrain_svm <- data[, -c("race", "native.country")][-ind,]
+imptest_svm <- data[, -c("race", "native.country")][ind,]
+impfit_svm <- train(income ~., data = imptrain_svm, method = "svmLinear2",
+                    trControl = svmcontrol, 
+                    tuneGrid = data.frame(cost = c(
+                      2^-13, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
+plot(impfit_svm)
+impfit_svm
+impfit_svm$finalModel
+
+imppred_svm <- predict(impfit_svm, imptest_svm)
+impgauge_svm <- confusionMatrix(imppred_svm, imptest_svm$income, 
+                                mode = "prec_recall",
+                                positive = ">50K")
+```
+```{r echo = FALSE}
+print(impgauge_svm)
+impgauge_svm$byClass["F1"]
+```
+The resulting $F_1$ score 0.6300872 is slightly better than full attributes model, this result can somewhat validate our assumption that, use the selective important predictors is at least as good as the full predictor model, and in some particular case, it could be a slightly better choice, if the computation cost is considered during the process. 
+
+So the best SVM is important variable linear kernel, but we can conclude the full predictor lienar kernel model is at the same performance level, since their $F_1$ scores have very slight difference. Since we have transformed our dataset into full numeric one already for the SVM algorithm, intuitively we can use the same numeric dataset to train some methods, which is based on numeric data. In next, we will try to fit the logistic regression with our numeric dataset, to see if it can compete with trees and SVM methods. 
+
+###4. Logistic Regression
