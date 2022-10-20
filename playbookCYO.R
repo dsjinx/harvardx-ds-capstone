@@ -616,10 +616,14 @@ gauge_stack <- confusionMatrix(pred_stack, as.factor(test_svm$income),
 print(gauge_stack)
 gauge_stack$byClass["F1"]
 
-#######
-"Error: At least one of the class levels is not a valid R variable name; 
-This will cause errors when class probabilities are generated because 
-the variables names will be converted to  X..50K, X.50K . 
-Please use factor levels that can be used as valid R variable names  
-(see ?make.names for help)."
+stack_boost <- caretStack(ensemble_fit, method = "AdaBoost.M1", 
+                          trControl = trainControl(method = "boot", number = 5, 
+                                                   savePredictions = "final"))
+pred_stackbst <- predict(stack, test_svm)
+gauge_stackbst <- confusionMatrix(pred_stack, as.factor(test_svm$income), 
+                               mode = "prec_recall",
+                               positive = "gt50K")
+print(gauge_stackbst)
+gauge_stackbst$byClass["F1"]
+
 

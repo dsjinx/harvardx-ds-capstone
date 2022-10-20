@@ -509,8 +509,173 @@ impgauge_svm <- confusionMatrix(imppred_svm, imptest_svm$income,
 print(impgauge_svm)
 impgauge_svm$byClass["F1"]
 ```
-The resulting $F_1$ score 0.6300872 is slightly better than full attributes model, this result can somewhat validate our assumption that, use the selective important predictors is at least as good as the full predictor model, and in some particular case, it could be a slightly better choice, if the computation cost is considered during the process. 
+The resulting $F_1$ score 0.6300872 is about the same as the full attributes model, this result can somewhat validate our assumption that, use the selective important predictors is at least as good as the full predictor model, and in some particular context, it could be a slightly better choice, if the computation cost is considered during the process. 
 
-So the best SVM is important variable linear kernel, but we can conclude the full predictor lienar kernel model is at the same performance level, since their $F_1$ scores have very slight difference. Since we have transformed our dataset into full numeric one already for the SVM algorithm, intuitively we can use the same numeric dataset to train some methods, which is based on numeric data. In next, we will try to fit the logistic regression with our numeric dataset, to see if it can compete with trees and SVM methods. 
+Overall the best SVM is important variable linear kernel, and the full predictor linear kernel model, because their $F_1$ scores have very slight difference. Since we have transformed our dataset into full numeric one already for the SVM algorithm, intuitively we can use the same numeric dataset to train some methods, which is based on numeric data. In next, we will try to fit the logistic regression with our numeric dataset, to see if it can compete with trees and SVM methods. 
 
 ###4. Logistic Regression
+We will use two different sets of data from the SVM to test the performance of logistic regression, and we use the "glm" in caret package to implement the algorithm. We will train both the full predictors and selective important predictors from the above svm dataset in below. 
+```{r eval = FALSE}
+#use the full predictor to train and test
+fit_glm <- train(income ~., data = train_svm, method = "glm", 
+                 family = binomial)
+
+pred_glm <- predict(fit_glm, test_svm)
+gauge_glm <- confusionMatrix(pred_glm, test_svm$income, 
+                             mode = "prec_recall",
+                             positive = ">50K")
+```
+```{r echo = FALSE}
+print(gauge_glm)
+gauge_glm$byClass["F1"]
+```
+```{r eval = FALSE}
+#use the important predictor to train and test
+impfit_glm <- train(income ~., data = imptrain_svm, method = "glm", 
+                 family = binomial)
+
+imppred_glm <- predict(impfit_glm, imptest_svm)
+impgauge_glm <- confusionMatrix(imppred_glm, imptest_svm$income, 
+                             mode = "prec_recall",
+                             positive = ">50K")
+```
+```{r eval = FALSE}
+print(impgauge_glm)
+impgauge_glm$byClass["F1"]
+```
+The resulting $F_1$ scores of full predictors and important predictors are 0.6245919 and 0.6242315 respectively, so we can conclude that the logistic regression is performing the same over these two datasets as the SVM. After all those methods we have tried by now, it is spontaneously for us combing them in together by ensemble. 
+
+###5. Ensemble
+In general there are three kinds of ensemble methods: bagging, boosting, and stacking, and we will try to combine our previous models by stacking. The reason is that stacking method treats different models results like predictors, and fit them with a defined meta-model [@Hastie2009-at], and the meta-model options are very versatile, so it can mimic both bagging and boosting with the respective model selection. And because our case is a classification kind problem, we will try logistic regression and adaptive boosting methods as our meta-model to combine the random forest, linear SVM, and logistic regression. 
+
+Because the SVM and logistic regression can only take numeric predictors, we need to decide whether the random forest need to be re-turned for the numeric dataset. We also need to do some pre-processing work to convert the "<=" into "loe", and ">" into "gt" in our income classes, this is due to the data type requirement by the "caretEnsemble" package we use for the ensemble process. 
+```{r eval = FALSE}
+#caretEnsemble pkg does not recognise symbols, need to be replaced by charc
+cnvt_income <- train_svm[, lapply(.SD, 
+                             function (j) str_replace(j, "\\>", "gt")), 
+                             .SDcols = c("income")]
+cnvt_income <- cnvt_income[, lapply(.SD, 
+                             function(j) str_replace(j, "\\<=", "loe"))]
+
+cnvtst_income <- test_svm[, lapply(.SD, 
+                            function (j) str_replace(j, "\\>", "gt")), 
+                           .SDcols = c("income")]
+cnvtst_income <- cnvtst_income[, lapply(.SD, 
+                            function(j) str_replace(j, "\\<=", "loe"))]
+
+train_svm[, income := cnvt_income] 
+test_svm[, income := cnvtst_income]
+```
+```{r eval = FALSE}
+#make sure rf is still consistence in the digitised dataset
+enfit_rf <- train(income ~., data = train_svm, trControl = rfcontrol,
+                  method = "rf", tuneGrid = data.frame(mtry = best_mtry),
+                  nodesize = best_node, ntree = best_ntree)
+enpred_rf <- predict(enfit_rf, test_svm)
+engauge_rf <- confusionMatrix(enpred_rf, as.factor(test_svm$income), 
+                              mode = "prec_recall",
+                              positive = "gt50K")
+```
+```{r echo = FALSE}
+print(engauge_rf)
+engauge_rf$byClass["F1"]
+```
+```{r eval = FALSE}
+#re-tune the rf with the digitised dateset to compare the results
+entune_rf <- train(income ~., data = train_svm, method = "rf",
+                     trControl = rfcontrol, 
+                     tuneGrid = data.frame(mtry = seq(1, 5, 1)))
+enbest_mtry <- entune_rf$bestTune$mtry
+
+en_nodes <- seq(1, 20, 2)
+entune_nds <- sapply(en_nodes, function(nd){
+  train(income ~., data = train_svm, method = "rf",
+        trControl = rfcontrol,
+        tuneGrid = data.frame(mtry = enbest_mtry),
+        nodesize = nd)$results$Accuracy
+})
+enbest_node <- en_nodes[which.max(entune_nds)]
+```
+```{r echo = FALSE}
+qplot(en_nodes, entune_nds, geom = c("point", "line"))
+```
+```{r eval = FALSE}
+en_ntrees <- seq(10, 200, 10)
+entune_ntree <- sapply(en_ntrees, function(nt){
+  train(income ~., data = train_svm, method = "rf",
+        trControl = rfcontrol,
+        tuneGrid = data.frame(mtry = enbest_mtry),
+        nodesize = enbest_node,
+        ntree = nt)$results$Accuracy})
+enbest_ntree <- ntrees[which.max(entune_ntree)]
+```
+```{r echo = FALSE}
+qplot(en_ntrees, entune_ntree, geom = c("point", "line"))
+```
+```{r eval = FALSE}
+#use the re-tuned parameters to test the result
+enfit_forest <- train(income ~., data = train_svm, method = "rf",
+                    tuneGrid = data.frame(mtry = enbest_mtry),
+                    nodesize = enbest_node,
+
+enpred_forest <- predict(enfit_forest, test_svm)
+engauge_forest <- confusionMatrix(enpred_forest, as.factor(test_svm$income), 
+                                  mode = "prec_recall",
+                                  positive = "gt50K")
+```
+```{r echo = FALSE}
+print(engauge_forest)
+engauge_forest$byClass["F1"]
+```
+By comparing the two resulting $F_1$ scores, the re-turned result is 0.6878936, which is better but in a very limited scope than the pre-tuned 0.6767642. We will use the re-tuned parameters in our final ensemble. Because we are using the digitised dataset from SVM in above, we can use the same parameters as before for the "glm" and "svmLinear2". 
+```{r eval = FALSE}
+#5-fold cross validation used to create dependent probs for later use
+#although we have define all the turned parameters in place
+crEnsem <- trainControl(method = "cv", index = ind_cv, 
+                        savePredictions = "final", classProbs = TRUE)
+ensemble_fit <- caretList(income ~., data = train_svm, trControl = crEnsem,
+                          tuneList = list(
+                          svm = caretModelSpec(method = "svmLinear2", 
+                                  tuneGrid = data.frame(cost = 0.03125)),
+                          glm = caretModelSpec(method = "glm", 
+                                  family = binomial),
+                          rf = caretModelSpec(method = "rf", 
+                                  tuneGrid = data.frame(mtry = enbest_mtry),
+                                  nodesize = enbest_node,
+                                  ntree = enbest_ntree)))
+
+#stacking by logistic regression
+stack <- caretStack(ensemble_fit, method = "glm", 
+                    trControl = trainControl(method = "boot", number = 5, 
+                                             savePredictions = "final"))
+pred_stack <- predict(stack, test_svm)
+gauge_stack <- confusionMatrix(pred_stack, as.factor(test_svm$income), 
+                               mode = "prec_recall",
+                               positive = "gt50K")
+```
+```{r echo = FALSE}
+gauge_stack$byClass["F1"]
+```
+```{r eval = FALSE}
+#stacking by adaptive boosting
+stack_boost <- caretStack(ensemble_fit, method = "AdaBoost.M1", 
+                          trControl = trainControl(method = "boot", number = 5, 
+                                                   savePredictions = "final"))
+pred_stackbst <- predict(stack, test_svm)
+gauge_stackbst <- confusionMatrix(pred_stack, as.factor(test_svm$income), 
+                               mode = "prec_recall",
+                               positive = "gt50K")
+```
+```{r echo = FALSE}
+gauge_stackbst$byClass["F1"]
+```
+The interesting results show that the two different meta-models are giving us the exact same $F_1$ scores 0.6879334. We can suspect that this results are caused by first the two stacking meta-models we use are all voting decision based, which use the consensus of across the results those three base models. Secondly these three base models are generating about the same prediction results as shown in below. According to the 'vignette' of the "caretEnsemble" package, we should consider to select the uncorrelated or at least weak correlated models for ensemble [@ensemble]. The original numeric and categorical data attributes data structure actually creates a paradox of choosing uncorrelated models and without modifying the dataset. We believe the process of digitise those qualitative values can loose the real information in those attributes at some substantial level. But if we do not digitise those qualitative values, then we have very limited choices of models to choose from, basically only the tree family we can possibly use. 
+```{r echo = FALSE}
+modelCor(resamples(ensemble_fit))
+```
+
+##Conclusion
+By comparing all the methods we tested from above, it conclude that the best performing result is the random forest with the $F_1$ score ??, and it even outperformed the three models stacking method. But by comparing across all the tested methods $F_1$ scores, there are not much difference between them, except the dummy guessing method. This report in overall proves that, for a quantitative and qualitative mixed attributes dataset, the most effective algorithm would be the forest based. 
+```{r echo = FALSE}
+
+```
