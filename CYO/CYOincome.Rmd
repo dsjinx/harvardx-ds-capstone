@@ -3,20 +3,36 @@ title: "CYOincome"
 author: "Jin Xin"
 output: pdf_document
 date: "Oct, 2022"
-bibliography: CYOref.bib
+bibliography: CYOreferences.bib
 ---
-
-```{r include = FALSE}
+```{r include = FALSE, message = FALSE, warning = FALSE}
+#this chunk is for report generating purpose
 #these pkgs and file used for generating report
 library(tidyverse)
 library(data.table)
 library(caret)
-library(e1071)
 library(GGally)
-load("~/git-repos/harvardx-ds-capstone/CYO/fullrun.RData")
+load("rmdrun.RData")
 ```
+##Executive Summary
+This report is going to try different methods to achieve a good $F_1$ score on the target "income" class out of all the surveyed candidates. The used Adult Income Census dataset has two income classes: "<= 50K", ">50K". The goal is to successfully predict all the ">50K" income samples in the testset. But the challenge is the class dominance of "<=50K", which made the ">50K" class to be short-sampled, so it is hard to achieve a good preidiction accuracy for the ">50K" income class. The methods used in this report include CART (classification and regression tree), random forest, SVM (support vector machine), and logistic regression. The best performing individual method is random forest with a $F_1$ score of 0.6908837. In addition, the stacking method is tested to combine the tuned random forest, SVM, and GLM, and the achieved $F_1$ score is 0.6879334. The results suggest that the random forest is the best performing method among all the individual and ensemble methods tested on this dateset. 
 ```{r eval = FALSE}
 #libraries are used in this report
+if(!require(tidyverse))
+  install.packages("tidyverse")
+if(!require(data.table))
+  install.packages("data.table")
+if(!require(caret))
+  install.packages("caret")
+if(!require(doParallel))
+  install.packages("doParallel")
+if(!require(e1071))
+  install.packages("e1071")
+if(!require(caretEnsemble))
+  install.packages("caretEnsemble")
+if(!require(GGally))
+  install.packages("GGally")
+
 library(tidyverse)
 library(data.table)
 library(caret)
@@ -24,28 +40,34 @@ library(doParallel)
 library(e1071)
 library(caretEnsemble)
 library(GGally)
-#??data
+
+#dataset source can be downloaded from the following links. 
+#the downloaded file is a zip need to be unzipped into the local working dir
+#www.kaggle.com/datasets/uciml/adult-census-income
+#or 
+#github.com/dsjinx/harvardx-ds-capstone/blob/main/CYO/AdultCensusIncome.zip
+#use the function in below to read the zip file
+wd <- getwd()
+data <- paste(wd, )
 ```
-##Executive Summary
-This report is going to apply different methods for achieving a good $F_1$ score on the target income class out of all the surveyed candidates. The used Adult Income Census dataset has two income classes: "<= 50K", ">50K". The goal is to successfully predict all the ">50K" income samples in the testset. But the challenge is the class dominance of "<=50K", which made the ">50K" class to be short-sampled, so it is hard to achieve a good accuracy of ">50K" class. The methods used in this report include CART (classification and regression tree), random forest, SVM (support vector machine), and logistic regression. The best performing individual method is ??? with a $F_1$ score of ???. In addition, the stacking method is used to combine the tuned random forest, SVM, and GLM, and the achieved $F_1$ score is ????. The results indicate that the .... is the best performing method in this dateset.
 
 ##Introduction
-We are going to apply different but not exhaustive classification methods in the report. The $F_1$ score is used as evaluation metric, the reason is coming from the unbalanced sample size in the dataset. The Adult Income Census datast we use in this report classifies the income levels into two groups, one is "<=50K", and the other ">50K", but the ">50K" class has much smaller sample size comparing to "<=50" class, [@nielsen_2015] and many practical machine learning articles suggest that better result can always be achieved by increasing sample size. On the contrary, small sample size may hinder to achieve a desirable result. So the balanced $F_1$ score can help us evaluate both sensitivity and specificity on the target ">50K" class, this attribute is making $F_1$ a rather effective metric comparing overall accuracy, which will be showing a false high value due to the big sample size of the other class.  
+We are going to apply different but not exhaustive classification methods in this report. The $F_1$ score is used as evaluation metric, the reason is coming from the unbalanced sample size in the dataset. The Adult Income Census datast we use in this report classifies the income levels into two groups, one is "<=50K", and the other is ">50K", but the ">50K" class has much smaller sample size comparing to "<=50" class. According to @nielsen_2015 and many practical machine learning texts, increased sample size can effectively result a good learning performance, but on the contrary a small sample size can hinder the training result. So we choose to evaluate the candidate methods With the balanced $F_1$ score, which can give us a good evaluation over the sensitivity and specificity on the target ">50K" income class. This characteristic of $F_1$ score makes it a rather effective metric comparing the overall accuracy, which can falsely report us a high value, due to the high accuracy contribution from the big sample size "<=50K" class.  
 
-The following content is broken into three sections. In the data exploration part, we will explore the data in a top-down strategy, by having a broad view of the dataset structure, and break the predictor attributes into groups according to the value classes, then look for any trend or relations across those attributes. After that, we will go into methods details, we will justify the reasons for choosing those methods used in this report. Lastly, we will evaluate the overall performances across different methods. 
+The following content is broken into three sections. In the data exploration part, we will explore the data in a top-down strategy, by having a broad view of the dataset structure, and break the predictor attributes into groups according to the element value classes, then look for any trend or relations across those attributes. After that, we will get into methods details. We will justify the logic of choosing those candidate methods tested in the report. Lastly, we will evaluate the overall performances across different candidate methods, and discuss about the other possible approaches may improve the performance in further. 
 
 ##Data Exploration
 The [Adult Census Income](www.kaggle.com/datasets/uciml/adult-census-income) dataset we use is from the 1994 Census bureau database. This dataset has the dimension of 32561 by 15, which has samples in rows, and measured variables in columns, so every single sample has 15 different attributes, and there are 32561 samples in total. 
 ```{r echo  = FALSE}
 str(data)
 ```
-The attributes are measured both quantitatively and qualitatively with respect to integer class and character class. The dependent variable "income" is what we are trying to predict, and it is in a qualitative form with only two different categories: "<=50K" and ">50K". This two classes element structure can help us narrow down the possible methods used will be either producing "YES" or "NO" results or giving the probability toward each category.
+The attributes are measured both quantitatively and qualitatively with respect to numeric/integer class columns and character class columns. The dependent variable "income" is what we are trying to predict, and it is in a qualitative form with only two different categories: "<=50K" and ">50K". This two classes element structure can help us narrow down the possible methods used will be either producing "YES"/"NO" results, or giving the probability toward each category.
 ```{r echo  = FALSE}
 sapply(data, function(j) class(j))
 ```
 
 ###Data Visualisation
-Before we explore the data in further details, we want to check on the dataset for the strange and missing values. Although there is no "NA", but we can see some "?" showing in "workclass", "occupation", and "native.country" in in table below. Since they are all in the qualitative attributes, and recorded in character string, so we will decide the way to handle them, when we explore these attributes in details. 
+Before we explore the data in further details, we want to check on the dataset for the strange and missing values. Although there is no "NA", but we can see some "?" showing in "workclass", "occupation", and "native.country" in table below. Since they are all in the qualitative attributes columns, and recorded in character string. However we will decide the way to handle them, when we explore these attributes in details. 
 ```{r}
 sum(is.na(data))
 ```
@@ -55,7 +77,7 @@ data.table(vars = names(temp),
            "num of ?" = as.numeric(temp)) %>% knitr::kable()
 rm(temp)
 ```
-After the initial inspection on the dateset, we now get into more details about the dependent variable "income", and the other 14 attributes columns. For the "income", all the samples are classified into two categories: "<=50K" and ">50K". By checking the distribution across those two income levels we can see that, the income of "<=50K" is the dominant group across all the samples with the size being 3 times of the ">50K" group, and only about 24% of the sample belongs to ">50K". 
+After had the initial glimpse of the dateset, we now get into the details about the dependent variable "income" column, and the other 14 attribute columns. For the "income", all the samples are classified into two categories: "<=50K" and ">50K". By checking the distribution across those two income levels, we can see that the income level of "<=50K" is the dominant group across all the samples, which has the size of being 3 times of the ">50K" group, and only about 24% of the samples are in ">50K" group. 
 ```{r}
 sum(data$income == "<=50K") / sum(data$income == ">50K")
 ```
@@ -69,20 +91,20 @@ ggplot(plot_temp, aes(income, pct)) +
 
 rm(plot_temp)
 ```
-This unbalanced sample size can potentially make it more challenging to achieve a high accuracy on predicting ">50K" income group than the "<=50K" ones, the reason is that we have more samples to study for the "<=50K" group, but the ">50K" group is under-sampled, and if their attributes are not clustered, or lack of strong manifestation on their 14 attributes, then we can only reply on minimising the error on "<=50K" group to improve the ">50K" group accuracy. On the other hand, this can be viewed as an advantage of having only two groups of dependents. 
+This unbalanced sample size can potentially make it more challenging to achieve a high accuracy on predicting ">50K" income group, than the "<=50K" ones. The reason is that we have more samples to study for the "<=50K" group, but the ">50K" group is under-sampled, and if their attributes are not clustered, or lack of strong manifestation with the 14 attributes, then we can only reply on minimising the error on "<=50K" group to improve the ">50K" group accuracy. On the other hand, this could be viewed as a benefit of having only two groups of dependents to work with. 
 
-As mentioned in above, there are two different classes of predictors: "integer" and "character", so we will look those two classes of attributes separately. We will look into the "integer" class first. 
+As mentioned in above, there are two different classes of predictors: "integer" and "character", so we are going to look those two classes of attributes separately. We will look the "integer" class first. 
 ```{r}
 cols <- names(which(sapply(data, class) == "integer"))
 summary(data[, ..cols]) #check any strange value
 ```
-The above lot of "integer" columns summary is not showing any strange numbers, except in the "capital.gain" and "capital.loss" columns have 0's for most of their statistics, it makes sense that most people are earning less than 50K/year, and so most of them won't have any investment asset in place. Apart from this, the column "fnlwgt" we need to make some clarification about its meaning in here. It is stand for "final weight", simply speaking it represents the amount of people is sharing the same attributes of the row, which that "fnlwgt" value is in. Of course the census bureau has more rigorous explanation on it, but we just want to highlight its basic meaning to avoid the ambiguity caused by its name having a "weight" in it. 
+The above lot of "integer" columns summary is not showing any strange numbers, except the "capital.gain" and "capital.loss" columns have 0's for most of their statistics. It makes sense that most people are earning less than 50K/year, so most of them won't have any investment asset in place. Apart from this, the column "fnlwgt" we need to make some clarification about its meaning in here. It is stand for "final weight", simply speaking it represents the amount of people is sharing the same attributes of the row, where that "fnlwgt" value is. Of course the census bureau has more rigorous explanation on it, but we just want to highlight its basic meaning to avoid the ambiguity caused by the "weight" in its name. 
 ```{r}
 num_fp <- data[, ..cols][, lapply(.SD, 
               function(j) (j - mean(j)) / sd(j)), .SDcols = cols]
 summary(num_fp) #check potential outliers by normalising the columns
 ```
-After we normalise all the "integer" columns, it can give us much clearer picture about how far away those outliers are. The boxplot in below illustrate our finding in further. All of these six numeric attributes have many outliers indeed, and majority of the outliers are locating in the upper extreme, except the weekly working hour and number of years education taken, the outliers in those two attributes are locating in both upper and lower extreme. By comparing the distributions between "<=50K" on the left and ">50K" on the right, the age attribute is showing a reasonable picture to show that the strong earning power's age group are a bit older than "<=50K" group, and also has lower upper bound age. Meanwhile, the distribution of years of education is also telling us that, the extra number of years we invest in study can definitely reward us a good income in later days. At the same time, the weekly working hour shows the hard work pays off in everybody's belief. Next we will look into the relations in between those numeric attributes under different income groups. 
+After we normalise all the "integer" columns, we get a much clearer picture about how far away those outliers are. The boxplots in below illustrate our finding in further details. All of these six numeric attribute columns have many outliers indeed, and majority of the outliers are locating in the upper extreme, except the weekly working hour and number of years education taken, the outliers in those two attributes are locating in both upper and lower extremes. By comparing the distributions between "<=50K" on the left and ">50K" on the right, the age attribute is showing a reasonable distribution to illustrate that, the strong earning group's age range are a bit older than "<=50K" group, and also has lower upper bound age. Meanwhile, the distribution of years of education is telling us that, the extra number of years we invest in study have very high possibility to reward us a good income in later days. At the same time, the weekly working hour shows the hard work pays off as in everybody's belief. Next we will look into the relations in between those numeric attributes under different income groups. 
 ```{r echo = FALSE}
 num_fp <- num_fp[, income := data$income]
 
@@ -91,13 +113,13 @@ featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "box",
                           x = list(rot = 90)),
             layout = c(3, 2), auto.key = list(columns = 2))
 ```
-By inspecting the scatter plot matrix in below, none of the pairs out of those six numeric attributes are showing any clear trend or correlations, instead most pairs are really just random clusters. And this kind of non-correlation randomness are sharing in both "<=50k" and ">50K" income groups.
+By inspecting the scatter plots matrix in below, none of the pairs out of those six numeric attributes are showing any clear trend or correlations, instead most pairs are really just random clusters. And this kind of non-correlated randomness are shared in both "<=50k" and ">50K" income groups.
 ```{r echo = FALSE, warning = FALSE}
 trellis.par.set("fontsize", list(text = 8.5))
 featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "pairs", 
             auto.key = list(columns = 2))
 ```
-We now turn to the character class attributes. But before we proceed, we need to decide how we are going to treat those "?" from the exploration in above. Firstly, we want to have a general idea about the how many of them are there in our dataset, because from the total number of them, we can evaluate the potential harm of having them in place, then we decide how they could be handled to fit in our algorithms to be used later. 
+We now turn to the character class attributes. But before we proceed, we need to decide how we are going to treat those "?" from the exploration in above. Firstly, we want to have a general idea about the how many of them are there in our dataset, because from the total number of them, we can evaluate the potential harm of having them in place, then we decide how they could be treated to fit in our models later.
 ```{r}
 #collect all the char columns for future process
 char_cols <- names(data)[-which(names(data) %in% cols)][-9]
@@ -110,9 +132,9 @@ data.frame(var.name = names(mis_locate),
            pct.in.data = as.numeric(100 * mis_locate / dim(data)[1])) %>% 
            knitr::kable() #total % of each col elements are "?"
 ```
-The above figures are telling us that the "?" issue is not major, which is only 0.87% out of the whole dataset. In the column wise, we have seen the "?" only exists in three columns, and only "work class" and "occupation" have 5% of the data are recorded in "?", the "native.country" has less than 2% out of total. So those "?" values are too small to cause our dataset being sparse in whole. Also there is one good thing about the location of them, that none of the "?" is in the dependent column "income", which is to be predicted column, that means all the rows are the valid samples can be used. The other good thing is that, they are all categorical data, if we use an tree method to process them, they will not cause any problem in those kind of YES/NO logical algorithms. So we will leave them in place for now, and only treat them on an ad hoc basis.
+The above figures show that the "?" issue is not major, which is only 0.87% out of the whole dataset. In the column wise, we have seen the "?" only exists in three columns, and only "work class" and "occupation" have 5% of the data are recorded in "?", the "native.country" has less than 2% out of the total. So those "?" values are too small to cause our dataset being sparse in the whole. Also the good thing about the locations of them is that, none of the "?" is in the dependent "income" column, that means all the rows are valid samples can be classified. The other good thing is that, they are all categorical data, if we use a tree method to train them, they will not cause any problem in those kind of "YES"/"NO" logical rules. So we will leave them in place for now, and only treat them on an ad hoc basis.
 
-From the following block of bar plots, we can have a visual understanding of what the major class is in each attribute, that makes a surveyed sample to be a ">50K" income earner. The way to visually decide that class is the major driver of one income group is that, there is big gap for the same class showing across the two income groups. For example, the "workclass" attribute is clearly showing that the "never worked" and "without pay" are the two major classes can help distinguish the "<=50K" from the ">50K" income group. The "education" attribute has very interesting find out, it shows that those highly educated candidates with degrees in bachelor, master, and doctor are not primarily clustered in high income group, instead there is quite a lot of them are in "<=50K" income group. That is very counter intuitive with the findings from the education years in above numeric attributes. Apart from that, the attributes allocation between the two income groups are quite similar. 
+From the following block of bar plots, we can have a visual understanding of what the major class is in each attribute, that makes a surveyed sample to be a ">50K" income earner. The way to visually decide a major driver of one income group is that, there is big gap for a same attribute value showing across the two income groups. For example, the "workclass" attribute is clearly showing that the "never worked" and "without pay" are the two major attribute elements can help distinguish the "<=50K" from the ">50K" income group. The "education" attribute has a very interesting find out, it shows that those highly educated candidates with degrees in bachelor, master, and doctor are not primarily clustered in high income group, instead there is quite a lot of them are in "<=50K" income group. That is very counter intuitive with the findings from the education years in above numeric attributes. Apart from that, the attributes allocation between the two income groups are quite similar. 
 ```{r echo = FALSE}
 #create the character column only data frame
 char_fp <- data[, ..char_cols]
@@ -146,18 +168,17 @@ ggp3 <- lapply(7:8, function(j){
 })
 ggmatrix(ggp3, nrow = 1, ncol = 2, xAxisLabels = char_cols[7:8])
 ```
-So after going through those attributes visually, at least by human eyes, we can not set any model up to classify the two income groups effectively. But at least, these visual information can help us choose the possible working methods, which could be effective to handle those not strongly featured data. 
-
+So after going through those numeric and categorical attributes visually, at least by human eyes, we can not set any model up to classify the two income groups effectively. But at least, these visual information can help us choose the possible working methods, which could be effective to handle those not strongly featured data. 
 ```{r echo = FALSE}
 #clean out the memory
 rm(ggp1, ggp2, ggp3, char_fp, mis_locate, num_fp)
 ```
 
 ##Methods Details
-After the above visual understanding about the dataset, straightaway we can narrow down the methods selections down to trees, because the tree family can effectively handle different classes of variables, no matter they are numbers or character strings. So we will use a single tree method first, then use a forest method to compare how much better the result can be. But before everything we will utilise the dominance class phenomenon in the sample dependents "income" to make predictions based on purely guessing, we can use this dummy algorithm result as our benchmark to measure the other attending methods performances. 
+After the above visual understanding of the dataset, straightaway we can narrow down the methods options down to trees, because the tree family can effectively handle different classes of variables, no matter they are numbers or character strings. So we will use a single tree method first, then use a forest method to compare how much better the result can be. But before everything, we will utilise the dominant class phenomenon in the dependent "income" column, to make predictions based on purely guessing, we can use this dummy algorithm result as our benchmark to measure the other attending methods performances. 
 
 ###0. Guessing
-We are breaking the original dataset into a 8/2 fraction of train/test set first, and use the prevalence of the dominant group of "<=50" in the training set "income" column to toss a highly biased coin with faces of "<=50K" and ">50K", we will toss the coin for the times equal the number of samples we are guessing for in the test set. 
+We are breaking the original dataset into train/test set by 8/2 fractions first, and use the prevalence of the dominant income group of "<=50" in the training set to toss a highly biased coin with two faces of "<=50K" and ">50K", we will toss the coin for the number of times equal the number of samples we are guessing for in the test set.
 ```{r eval = FALSE}
 #break data into 8/2 train/test set
 set.seed(1, sample.kind = "Rounding")
@@ -169,7 +190,8 @@ test <- data[ind, ]
 #chance of seeing <=50k in training set
 prev <- sum(train$income == "<=50K") / dim(train)[1] 
 
-#use the <=50k chance to toss coin for dim(test)[1] number of times
+#use the "<=50k" chance to make a biased coin
+#toss the coin for dim(test)[1] number of times
 set.seed(10, sample.kind = "Rounding")
 pred_guess <- sample(c("<=50K", ">50K"), dim(test)[1], replace = TRUE, 
                      prob = c(prev, 1 - prev)) 
@@ -181,21 +203,23 @@ gauge_guess <- confusionMatrix(as.factor(pred_guess), test$income,
 print(gauge_guess)
 gauge_guess$byClass["F1"]
 ```
-We get a $F_1$ score of 0.246413 by tossing the coin, and this will be our benchmark of performance, we are expecting all the proper algorithms in below to have a substantial improvement above this baseline. By looking at the above performance stats from guessing, it proves that the accuracy is very biased performance metric has 0.629, which is a consequence of dominant dependent in test set. The kappa value of 4e-04 is telling us this accuracy is nothing different from coincidence. If we guess everyone is "<=50K", we can even get a much higher accuracy of 0.7571012. 
+We get a $F_1$ score of 0.246413 by tossing the biased coin, and this will be our performance benchmark, so we are expecting all the selected algorithms in below to have a substantial improvement over this baseline. By looking at the above performance stats of guessing, it proves that the accuracy is a highly biased performance metric with the value of 0.629, which is the consequence of dominant income class in the dataset. The kappa value of 4e-04 is telling us this accuracy is nothing different from coincidence. If we guess everyone is "<=50K", we get an even higher accuracy of 0.7571012. 
 ```{r}
 sum(test$income == "<=50K") / dim(test)[1]
 ```
 
 ###1. One tree
-Now we are turning to train and test with property algorithms. We will start with a single CART tree by using the "rpart" package. According to the package vignettes, there are a list of parameters can be tuned to affect the trained model performance in the test set, but the most effective one is complexity parameter "cp" [@r-rpart]. It is the parameter to decide how the tree is going to be pruned from the default tree, which is grown by the set of system default parameters. the "cp" value is meant to be in the range of [0, 1], when "cp" = 1 then the tree could be a stick with no branch at all, which can be said to be very under trained. When the "cp" = 0 could cause the tree to have the number of branches to be the total number of elements in the dataset - 1, alternatively it is to be said the model is very over trained. We will just use the default value for minimum number of samples to cause further branch split, and also for the minimum samples to be in a terminal node. The "raprt" package can also handle missing values by setting some rules with a set of surrogate parameters, although we have some small fraction of predictor variables are missing and recorded in "?", we will arbitrarily treat them as a valid value class, since they are all recorded as character string inside the character class columns 
+Now we are turning to the property algorithms. We will start with a single CART tree by using the "rpart" package. According to the package vignettes, there are a list of parameters can be tuned to affect the model performance, but the most effective one is complexity parameter "cp" [@r-rpart]. It is the parameter to decide how the tree is going to be pruned from the default tree, which is grown by the set of system default parameters. The "cp" value is meant to be in the range of [0, 1], when "cp" = 1 then the tree could be a stick with no branches at all, which can be defined as the case of under trained. When the "cp" = 0 could cause the tree to have the number of branches to be the total number of elements of the whole dataset - 1, alternatively it is to be said the model is very over trained. We will need to find the best value to fit our purpose. And for the minimum number of samples to create more branches split, and the minimum samples to be in a terminal node, we will just use the default values for them. The "raprt" package is made to be able to handle missing values with the surrogate parameters, although we have some small fraction of predictors are missing and recorded in "?", but we will arbitrarily treat them as a valid class value, since they are all recorded as character strings inside the character attributes columns, they can only be possibly used for creating some "YES/NO" based classification rules, without any numerical calculation on them. 
 ```{r eval = FALSE}
 registerDoParallel(cores = 4) 
 #caret can parallel the process to speed up the training
+#set the number of cores according to your own hardware situation
+#otherwise it can crash your system
 
 set.seed(2, sample.kind = "Rounding")
 ind_cv <- createFolds(1:dim(train)[1], k = 5, returnTrain = TRUE)
 
-#define the cross validation index can make the result to be reproducible
+#define the cross validation index to make the result reproducible
 treecontrol <- trainControl(method = "cv", index = ind_cv)
 fit_tree <- train(income ~ ., data = train, method = "rpart",
               trControl = treecontrol, 
@@ -207,7 +231,7 @@ plot(fit_tree)
 ```{r echo = FALSE}
 fit_tree$finalModel
 ```
-The cross validation results suggest when "cp" = 0.01111111, the model can provide us a favourable result. From the printing of the final mode, it shows our final tree has six leaf nodes or terminal nodes. In those leafs we can see that the majority of the classifiers are the capital gain and loss, which just coincide with our visual findings in above. 
+The cross validation results suggest when "cp" = 0.01111111, the model can provide us a favourable result. From the printing of the final mode, it shows our final tree has six leaf nodes or terminal nodes marked by the $\ast$. In those leafs we can see that the majority of the classifiers are the capital gain and capital loss, which just coincide with our visual findings in above. 
 ```{r eval = FALSE}
 pred_tree <- predict(fit_tree, test)
 gauge_tree <- confusionMatrix(pred_tree, test$income, 
@@ -218,12 +242,12 @@ gauge_tree <- confusionMatrix(pred_tree, test$income,
 print(gauge_tree)
 gauge_tree$byClass["F1"]
 ```
-The final $F_1$ score of our single tree is 0.6372981, which is very encouraging comparing to 0.246413 of the guessing benchmark, that is 158% improvement. And the kappa ratio 0.5445 is telling us our higher over all accuracy is not by chance. 
+The final $F_1$ score of our single tree is 0.6372981, which is very encouraging, comparing to 0.246413 of the guessing benchmark, and that is 158% improvement. At the same time the kappa ratio 0.5445 is telling us our higher overall accuracy is not by luck. 
 
 ###2. Forest
-Since we have tried the tree method, then the forest method can not be ignored in the tree family. As stated in Prof. Irizarry's text, random forests can improve the single decision tree performance by bagging on multiple smaller trees [@irizarry_2022]. The logic behind the bagging is that, instead of growing one tree out of all the available 14 predictors, we randomly pick "mtry" number of predictors to grow "ntree" number of small trees, the size of the trees is defined by the "nodesize", with smaller trees having larger "nodesize". So with the central idea of bagging, we would avoid to have the situation we faced in above single tree, where very few predictors "capital gain" and "capital loss" dominate the decision rules. This could be a sign of under training. And there also could be case of over training in a tree, if the rule of branch splitting is too granular, the bagging method can also accommodate this situation. 
+Since we have tried the tree method, then the forest method can not be ignored in the tree family. As stated in Prof. Irizarry's text, random forests can improve the single decision tree performance by bagging on multiple smaller trees [@irizarry_2022]. The logic behind the bagging is that, instead of growing one tree out of all the available 14 predictors, we randomly pick "mtry" number of predictors to grow "ntree" number of small trees, the size of the trees is defined by the "nodesize", with smaller trees having larger "nodesize". So with the central idea of bagging, we would avoid to have the situation we faced in above single tree, where very few predictors such as "capital gain" and "capital loss", that dominate the majority of the decision rules. This could be a sign of under training. And there also could be the case of over training in a tree, if the rule of branch splitting is too granular, then the bagging method can also accommodate this situation. 
 
-As we described in above, we will tune our "randomForest" with three major parameters: "mtry", "nodesize", "ntree" sequentially. 
+As we described in above, we will tune our "randomForest" with three major parameters: "mtry", "nodesize", "ntree" in a sequential form. 
 ```{r eval = FALSE}
 #tune the mtry 1st to decide how many predictors for each trees
 #same cv index from the tree
@@ -239,7 +263,7 @@ plot(tune_forest)
 tune_forest
 ```
 ```{r eval = FALSE}
-#tune the nodesize to decide how big the leaf size
+#tune the nodesize to decide how big the leaf node is
 nodesize <- seq(1, 20, 2)
 tune_nds <- sapply(nodesize, function(nd){
   train(income ~., data = train, method = "rf",
@@ -264,7 +288,7 @@ tune_ntree <- sapply(ntrees, function(nt){
 ```{r echo = FALSE}
 qplot(ntrees, tune_ntree, geom = c("point", "line"))
 ```
-The above turning process suggest that the optimised forest is composed by "ntrees" = 180 trees, the minimum leaf size "nodesize" = 3, which means the trees in the forest are quite large, and the number of predictors "mtry" we use to grow each tree is equal to 12, almost include all the 14 available ones. Then we check on the test set performance in below. 
+The above turning process suggest that the optimised forest is composed by "ntrees" = 180 trees, the minimum leaf size "nodesize" = 3, which means the trees in the forest are quite large, and the number of predictors "mtry" we use to grow each tree is 12, almost include all the 14 available predictors. Then we check on the performance on test set in below. 
 ```{r eval = FALSE}
 fit_forest <- train(income ~., data = train, method = "rf",
                      tuneGrid = data.frame(mtry = best_mtry),
@@ -280,26 +304,27 @@ gauge_forest <- confusionMatrix(pred_forest, test$income,
 print(gauge_forest)
 gauge_forest$byClass["F1"]
 ```
-The final $F_1$ score 0.6908837 does meet our initial expectation of achieving a better performance than the single tree in before, although the improvement is very limited for just over 8%. In next we will jump out of trees family, to try another approach in a more linear algebra way, which is the Support Vector Machine (SVM). 
+The final $F_1$ score 0.6908837 does meet our initial expectation of achieving a better performance than the single tree in before, although the improvement is very limited for just over 8%. In next we will jump out of trees family to try another approach in a more linear algebra way, which is the Support Vector Machine (SVM). 
 
 ###3. Support Vector Machine
-Broadly speaking the SVM is to search a hyperplane that can effectively separate two different class samples in the attributes space. In our case each row of the dataset represents a surveyed sample, which has 14 attributes dimensions, so we are searching a hyperplane inside a 14 dimension space. Intuitively this hyperplane should have the dimension of 13, because in a x-y 2 dimension, it is a single line, and in a x-y-z 3 dimensional space, it is a 2 dimensional plane. According to the original paper, this hyperplane is spanned by the selective vectors out of the whole dataset [@Cortes1995]. What it means is that, we believe the two class samples are clustering toward two opposite directions, and those samples at the joint border of the two clusters are considered as supporting vectors. 
+Broadly speaking the SVM is to search a hyperplane that can effectively separate two different class samples in the attributes space. In our case each row of the dataset represents a surveyed sample, which has 14 attributes dimensions, so we are searching a hyperplane inside a 14 dimension space. Intuitively this hyperplane should have the dimension of 13, because in a x-y 2 dimension, it is a single line, and in a x-y-z 3 dimensional space, it is a 2 dimensional plane. According to the original paper, this hyperplane is spanned by the selective vectors out of the original dataset [@Cortes1995]. What it means is that, we believe the two class samples are clustering toward two opposite directions, and those samples at the joint border of the two clusters are considered as supporting vectors. 
 
-There are two popular SVM packages in R, and we use the LIBSVM based "e1071" package, the LIBSVM is created and maintained by the team from National Taiwan University. We need to tune the model based on the chosen kernel. According to the package document, if the samples are in high dimensions, then the most basic linear kernel would be the best performing choice [@CC01a]. So we will turn the model with linear kernel first, then try different kernel and approaches to check, whether the basic linear model is the best choice for our purpose. 
+There are two popular SVM packages in R, and we use the LIBSVM based "e1071" package, the LIBSVM is created and maintained by the team from National Taiwan University. We need to tune the model based on the chosen kernel. According to the package document, if the samples are in high dimensions, then the most basic linear kernel would be the best performing choice [@CC01a]. So we will turn the model with linear kernel first, then try different kernel and approaches to compare, whether the basic linear model is the best choice to serve our purpose. 
 
-Before train the model, we need to make our dataset to fit the algorithm, because the algorithm only works on quantitative data, but not qualitative data. For all the qualitative attributes columns, there are two options to digitise them, one option is to use the 'dummyVars' function in 'caret' can turn those columns values into binary values, and creating a new column for every categorical data value in the origin dataset. For example, in the "education" column, we have 15 different categories of data in place. 
+Before train the model, we need to make our dataset to fit the algorithm, because the algorithm only works on quantitative data, but not qualitative data. For all the qualitative attributes columns, there are two options to digitise them, one option is to use the 'dummyVars' function from "caret" package can turn those columns' categorical values into binary values, and creating a new column for every categorical data value in addition to the original dataset. For example, in the "education" column, we have 15 different categories of data in place. 
 ```{r echo = FALSE}
 ogdata <- fread("adult.csv")
 unique(ogdata$education)
 rm(ogdata)
 ```
-The function 'dummyVars' will create another 15 new columns with the names being those qualitative values. If we use this function on all the 8 qualitative attributes columns, we will have lots of 0's in our new dataset, which means we get a huge sparse dataset. High sparsity could become another risk for our model. The central idea of pre-processing and data cleaning is to fit in the algorithm, and improve the performance, so we will take another approach for those qualitative values. Our approach is to digitise them locally, use the same "education" column example, we will simply mark them with digits accordingly with their positions index in the result of 'uniqueN' function. For the "?", we will force them to be 0, regardless of their position index, so for the three columns have the "?" values, we will treat them a little differently. 
+The function 'dummyVars' will create another 15 new columns with the names being those qualitative values. If we use this function on all the 8 qualitative attributes columns, we will have lots of 0's in our new dataset, which means we get a huge sparse dataset. High sparsity could become another risk for our model. The central idea of pre-processing and data cleaning is to fit in the algorithm, and improve the performance, so we will take another approach for those qualitative values. Our approach is to digitise them locally, use the same "education" column example, we will simply mark them with digits accordingly with their position indexes in the result of 'uniqueN' function. For the "?", we will force them to be 0, regardless of their position index, so for the three columns have the "?" values, we will treat them a little differently. 
 ```{r eval = FALSE}
 ##digitise all categorical columns
 data_digit <- data[, ..char_cols]
 sapply(data_digit, uniqueN)
 sapply(data_digit, unique)
 
+#find all the "?" and turn them into 0
 data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
 
 data_digit <- data_digit[, 
@@ -308,12 +333,10 @@ data_digit <- data_digit[,
 data_digit[, lapply(.SD, function(j) sum(str_detect(j, "\\?")))]
 data_digit[, lapply(.SD, function(j) sum(str_detect(j, "0")))]
 
-unique(data_digit$education)
-sum(str_detect(data_digit$education, "10th"))
-
 sapply(data_digit, unique)
 
-##containing "?" cols set them to be "0"
+##cols contain "?", force them to be "0"
+#the other values follow the rule to be transformed into the index number
 wc <- 1:uniqueN(data_digit$workclass)
 for(w in wc){data_digit$workclass[which(data_digit$workclass == 
                     unique(data_digit$workclass)[w])] <- wc[w] - 1}
@@ -361,10 +384,11 @@ data_digit <- data[, (char_cols) := data_digit]
 str(data_digit)
 
 #same partition index from trees
+#the digitised train/test set
 train_svm <- data_digit[-ind, ]
 test_svm <- data_digit[ind, ]
 ```
-After we have the data ready, we will turn the model next. Because we are using the linear kernel first, the only parameter we need to tune is the "cost". This parameter is acting as the Lagrange multiplier in the to be solved dual problem [@Cortes1995]. Geometrically it is the trade-off margin of our optimised hyperplane, because of course we will not get the ideal dataset, whose two classes samples are perfectly separable, so we also call this hyperplane as the soft margin hyperplane, which allows training errors within a boundary of [0, Cost] [@Cortes1995, @smo]. 
+After we have the data ready, we will turn the model next. Because we are using the linear kernel first, the only parameter we need to tune is the "cost". This parameter is acting as the Lagrange multiplier in the dual problem for solving the SVM [@Cortes1995]. Geometrically it is the trade-off margin of our optimised hyperplane, because in most of the time, we will not get an ideal dataset, such that the two sample classes are perfectly separable, the error of classification is certainly to happen. We also call this kind of hyperplane as the soft margin hyperplane, which allows training errors within a boundary of [0, Cost] [@Cortes1995, @smo]. 
 ```{r eval = FALSE}
 #use the same cv index from trees to make the training process reproducible
 svmcontrol <- trainControl(method = "cv", index = ind_cv)
@@ -382,13 +406,13 @@ gauge_svm <- confusionMatrix(pred_svm, test_svm$income,
 print(gauge_svm)
 gauge_svm$byClass["F1"]
 ```
-The final $F_1$ score 0.6290499 is certainly favourable comparing to the guessing benchmark, but is not as good as the two tree methods in above. This result makes us to doubt our choice of linear kernel, so we try to map our data with a 2nd degree polynomial kernel to compare the performance. The general idea about kernel is mapping the data into a higher dimension, which can effectively solve the low dimension data, but our data are in a 14 dimension space already, so we chose the linear kernel first. 
+The final $F_1$ score 0.6290499 is certainly favourable comparing to the guessing benchmark, but is not as good as the two tree methods in above. This result makes us doubt our choice of linear kernel, so we will try to map our data with a 2nd degree polynomial kernel for comparison. The general idea about kernel is mapping the data into a higher dimension, which can effectively solve the low dimension data, but our data are in a 14 dimensional space already, so we used the linear kernel at first. 
 
-In addition to the "cost" parameter, there is one more parameter "gamma" need to be turned. The "gamma" is a scalar coefficient that scales the output value of the the kernel. The kernel function in below is showing a 2nd degree polynomial, and the $\vec{x_i}$ and $\vec{x_j}$ are any two different sample points in the dataset, the r is a constant set as 0 in default, and we just use the r = 0 as default in our case. As stated in above, the purpose of 2nd or higher dimension kernel is to help solve the low dimension data, so we will prudently apply the 2nd degree instead of higher ones for our 14 dimensional sample data. 
+In addition to the "cost" parameter, there is one more parameter "gamma" to be turned for the polynomial kernel. The "gamma" is a scalar coefficient that scales the output value of the the kernel. The function in below is a 2nd degree polynomial kernel function, and the $\vec{x_i}$ and $\vec{x_j}$ are any two different sample points in the dataset, the "r" is a constant set as 0 in default, so we just use the r = 0 by default in our case. As stated in above, the purpose of 2nd or higher dimension kernel is to help solve the low dimension data, so we will just prudently apply the 2nd degree instead of higher ones for our 14 dimensional sample data. 
 $$
 K_{poly} = (\gamma(\vec{x_i}\cdot \vec{x_j})+r)^2
 $$
-Instead of tune these two parameters sequentially, we will tune them in a grid structure. With the 'expand.grid' function we can have create a "cost" choices time "gamma" choices pairs of values to be trained with the cross validation. We also use a mini set to train the linear and polynomial kernels at the same time, because the polynomial kernel actually increase the computation cost exponentially. We take 20% of the original data with the same proportion of two different income groups, by mimicking the dependent distribution we can make sure the polynomial kernel is also tested in a unbalanced sampling environment. At the end, we test these two mini set trained SVM on the full size test set to compare their performances. 
+Instead of tune these two parameters sequentially, we will tune them in a grid structure. With the 'expand.grid' function we can make a number of potential "cost" times number of potential "gamma" sized data frame, with each row is a cost-gamma pair to be trained with the cross validation. We also use a mini set to train the linear and polynomial kernels, because the polynomial kernel can increase the computation cost exponentially. To create the mini set, we use 20% of the original data, and keep the same proportions of the two income groups. By mimicking the dependent classes distribution, we can make sure the polynomial kernel is also tested in a unbalanced sample environment. At the end, we test these two mini set trained SVM on the full size test set to compare their performances. 
 ```{r eval = FALSE}
 #2nd degree polynomial kernel, compare with linear kernel
 c <- c(2^-5, 1, 2^5)
@@ -460,9 +484,14 @@ lingauge_svm <- confusionMatrix(linpred_svm, test_svm$income,
 print(lingauge_svm)
 lingauge_svm$byClass["F1"]
 ```
-The two $F_1$ scores of the results are 0.3573548 for 2nd degree polynomial, and 0.5908739 for linear, are proving our original belief that, linear kernel is better than higher dimensional mapping kernels in an already high dimensional sample space. In next, we question ourselves that, because the SVM was designed to solve the purely numeric attributes samples in a vector space, but we have many qualitative attributes, even we have preprocessed them into numbers, those numbers are rather out of nowhere dummy indexes without proper meanings. Then we want to test out, if we just train the linear kernel on those quantitative attributes, will we get a better performance. 
+```{r echo = FALSE}
+knitr::kable(sum_linpoly)
+```
+The two $F_1$ scores of the results are 0.3573548 for 2nd degree polynomial, and 0.5908739 for linear. They are proving our original belief that, linear kernel is better than higher dimensional mapping kernels in an already high dimensional sample space. In next, we question ourselves that, because the SVM was designed to solve the purely numeric attributes samples in a vector space, but we have many qualitative attributes, even we have pre-processed them into numbers, those numbers are rather out of nowhere dummy indexes without any real meaning. Then we want to test out, if we just train the linear kernel on those quantitative attributes, whether the performance can be improved. 
 ```{r eval = FALSE}
 #only use numeric predictors
+#the 'cols' is picking all the numeric columns
+#we defined the 'cols' in the beginning of visualisation
 numcols <- c(cols, "income")
 numtrain_svm <- data[, ..numcols][-ind,]
 numtest_svm <- data[, ..numcols][ind,]
@@ -484,21 +513,21 @@ numgauge_svm <- confusionMatrix(numpred_svm, numtest_svm$income,
 print(numgauge_svm)
 numgauge_svm$byClass["F1"]
 ```
-The resulting $F_1$ score is only 0.4123134, much worse than the full attribute linear model, so it means the way we treat the qualitative attributes are working. In next, we will try optimise our attributes selections to train the linear kernel again, and see whether the approach can bring us any improvement on the result. The motivation is from the tree family, for example the random forest trained results suggest that "race" and "native.country" are not top import attributes to make the classification, so we will try to exclude these two attribute columns in our linear svm, to see whether a better result can be obtained. 
+```{r echo = FALSE}
+knitr::kable(sum_numfull)
+```
+The resulting $F_1$ score is only 0.4123134, much worse than the full attribute linear model, so it means the way we treat the qualitative attributes are working. In next, we will try optimise our attributes selections to train the linear kernel again, and see whether the approach can bring us any improvement on the result. The motivation is from the tree family, for example the random forest trained result suggests that "race" and "native.country" are not top import attributes to make the classifications, so we will try to exclude these two attribute columns in our linear SVM, to see whether a better result can be obtained. 
 ```{r echo = FALSE}
 varImp(fit_forest, scale = FALSE)
 ```
 ```{r eval = FALSE}
-#exclude the race and native columns in predictor and train again
+#exclude the "race" and "native country" columns in predictor
 imptrain_svm <- data[, -c("race", "native.country")][-ind,]
 imptest_svm <- data[, -c("race", "native.country")][ind,]
 impfit_svm <- train(income ~., data = imptrain_svm, method = "svmLinear2",
                     trControl = svmcontrol, 
                     tuneGrid = data.frame(cost = c(
                       2^-13, 2^-10, 2^-8 ,2^-5, 2^-1, 1, 2^3)))
-plot(impfit_svm)
-impfit_svm
-impfit_svm$finalModel
 
 imppred_svm <- predict(impfit_svm, imptest_svm)
 impgauge_svm <- confusionMatrix(imppred_svm, imptest_svm$income, 
@@ -509,12 +538,14 @@ impgauge_svm <- confusionMatrix(imppred_svm, imptest_svm$income,
 print(impgauge_svm)
 impgauge_svm$byClass["F1"]
 ```
-The resulting $F_1$ score 0.6300872 is about the same as the full attributes model, this result can somewhat validate our assumption that, use the selective important predictors is at least as good as the full predictor model, and in some particular context, it could be a slightly better choice, if the computation cost is considered during the process. 
-
-Overall the best SVM is important variable linear kernel, and the full predictor linear kernel model, because their $F_1$ scores have very slight difference. Since we have transformed our dataset into full numeric one already for the SVM algorithm, intuitively we can use the same numeric dataset to train some methods, which is based on numeric data. In next, we will try to fit the logistic regression with our numeric dataset, to see if it can compete with trees and SVM methods. 
+The result $F_1$ score 0.6300872 is about the same as the full attributes model, this result can somewhat validate our assumption that, use the selective important predictors is at least as good as the full predictor model, and in some particular context, it could be a slightly better choice, if the computation cost is considered during for the process. By talking about computation cost, each of the SVM models we have tried in above can take few hours to train, especially the polynomial kernel can take days to train, by considering my hardware environment is a 5 years old i7 cpu windows machine.
+```{r echo = FALSE}
+knitr::kable(sum_impfull)
+```
+Overall the best SVM is important variable linear kernel, as well as the full predictor linear kernel, because their $F_1$ scores have very slight difference. Since we have transformed our dataset into full numeric set already for the SVM algorithm, intuitively we can use the same numeric dataset to train some methods, which is based on pure numeric data. In next, we will try to fit the logistic regression with our transformed numeric dataset, to see if it can compete with trees and SVM methods. 
 
 ###4. Logistic Regression
-We will use two different sets of data from the SVM to test the performance of logistic regression, and we use the "glm" in caret package to implement the algorithm. We will train both the full predictors and selective important predictors from the above svm dataset in below. 
+We will use both the full predictors and selective important predictors from the above SVM dataset to test the performance of logistic regression, and we are using the "glm" in "caret" package to implement the algorithm. 
 ```{r eval = FALSE}
 #use the full predictor to train and test
 fit_glm <- train(income ~., data = train_svm, method = "glm", 
@@ -543,12 +574,12 @@ impgauge_glm <- confusionMatrix(imppred_glm, imptest_svm$income,
 print(impgauge_glm)
 impgauge_glm$byClass["F1"]
 ```
-The resulting $F_1$ scores of full predictors and important predictors are 0.6245919 and 0.6242315 respectively, so we can conclude that the logistic regression is performing the same over these two datasets as the SVM. After all those methods we have tried by now, it is spontaneously for us combing them in together by ensemble. 
+The result $F_1$ scores of full predictors and important predictors are 0.6245919 and 0.6242315 respectively, so we can conclude that the logistic regression is performing the same over these two datasets. After all those methods we have tried by now, it is instantaneously for us to try combine them in together with ensemble method. 
 
 ###5. Ensemble
 In general there are three kinds of ensemble methods: bagging, boosting, and stacking, and we will try to combine our previous models by stacking. The reason is that stacking method treats different models results like predictors, and fit them with a defined meta-model [@Hastie2009-at], and the meta-model options are very versatile, so it can mimic both bagging and boosting with the respective model selection. And because our case is a classification kind problem, we will try logistic regression and adaptive boosting methods as our meta-model to combine the random forest, linear SVM, and logistic regression. 
 
-Because the SVM and logistic regression can only take numeric predictors, we need to decide whether the random forest need to be re-turned for the numeric dataset. We also need to do some pre-processing work to convert the "<=" into "loe", and ">" into "gt" in our income classes, this is due to the data type requirement by the "caretEnsemble" package we use for the ensemble process. 
+Because the SVM and logistic regression can only take numeric predictors, we need to decide whether the random forest need to be re-turned for the numeric dataset. We also need to do some pre-processing work to convert the "<=" into "loe", and ">" into "gt" for the two income groups, this is due to the data type requirement by the "caretEnsemble" package we use for implementing the ensemble process. 
 ```{r eval = FALSE}
 #caretEnsemble pkg does not recognise symbols, need to be replaced by charc
 cnvt_income <- train_svm[, lapply(.SD, 
@@ -677,5 +708,6 @@ modelCor(resamples(ensemble_fit))
 ##Conclusion
 By comparing all the methods we tested from above, it conclude that the best performing result is the random forest with the $F_1$ score ??, and it even outperformed the three models stacking method. But by comparing across all the tested methods $F_1$ scores, there are not much difference between them, except the dummy guessing method. This report in overall proves that, for a quantitative and qualitative mixed attributes dataset, the most effective algorithm would be the forest based. 
 ```{r echo = FALSE}
-
+knitr::kable(summary)
 ```
+The last thing we want to justify is that, even the best result $F_1$ score is still under 0.7, a very mediocre number. That is because the two income groups in our dataset is highly unbalanced with a 75/25 distribution ratio, and our target ">50K" group is the under sampled one. Since the $F_1$ score only cares about the specified class ">50K", it tells us how good our prediction in the purely ">50K" showing environment, and also both classes showing environment. So to improve the $F_1$ score, we could try to increase the result in either environment. The possible approaches could be using a more sophisticate way to digitise those qualitative attributes, then we might be able to achieve a better result from SVM, in addition we can also try to train it by a neural net. In terms of the stacking, with a better digitised dataset, we may be able to find some uncorrelated methods to achieve a better ensemble result. 

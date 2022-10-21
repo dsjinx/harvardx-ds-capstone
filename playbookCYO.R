@@ -394,6 +394,10 @@ lingauge_svm <- confusionMatrix(linpred_svm, test_svm$income,
 print(lingauge_svm)
 lingauge_svm$byClass["F1"]
 
+sum_linpoly <- data.table(Kernel = c("polynomial", "linear"),
+                          test_F_1 = c(polygauge_svm$byClass["F1"], 
+                                       lingauge_svm$byClass["F1"]))
+knitr::kable(sum_linpoly)
 #mini sample proved in high dimension predictors, linear kernel is good enough 
 #to produce a favourable result
 #also proved large sample size can improve performance
@@ -417,6 +421,11 @@ numgauge_svm <- confusionMatrix(numpred_svm, numtest_svm$income,
 print(numgauge_svm)
 numgauge_svm$byClass["F1"]
 
+sum_numfull <- data.table(Attributes = c("numeric", "full"), 
+                          test_F_1 = c(numgauge_svm$byClass["F1"],
+                                       gauge_svm$byClass["F1"]))
+knitr::kable(sum_numfull)
+
 #by eyeing the random forest important variables, 
 #the "race" and "native.country" is not in the top list
 #so exclude these two and try again
@@ -437,6 +446,12 @@ impgauge_svm <- confusionMatrix(imppred_svm, imptest_svm$income,
 print(impgauge_svm)
 impgauge_svm$byClass["F1"]
 
+sum_impfull <- data.table(Attributes = c("numeric", "full", "imp"), 
+                          test_F_1 = c(numgauge_svm$byClass["F1"],
+                                       gauge_svm$byClass["F1"],
+                                       impgauge_svm$byClass["F1"]))
+
+knitr::kable(sum_impfull)
 #impsvm is best, slightly better than full predictor linear svm
 #??table to summarise svm results
 
@@ -626,4 +641,14 @@ gauge_stackbst <- confusionMatrix(pred_stack, as.factor(test_svm$income),
 print(gauge_stackbst)
 gauge_stackbst$byClass["F1"]
 
-
+summary <- data.table(Methods = c("Guessing", "Tree.rpart", "Forest.rf", 
+                                  "SVM.linear", "glm", 
+                                  "Stacking.glm", "Stacking.boost"),
+                      F_1_score = c(gauge_guess$byClass["F1"], 
+                                    gauge_tree$byClass["F1"],
+                                    gauge_forest$byClass["F1"],
+                                    gauge_svm$byClass["F1"],
+                                    gauge_glm$byClass["F1"],
+                                    gauge_stack$byClass["F1"],
+                                    gauge_stackbst$byClass["F1"]))
+knitr::kable(summary)
