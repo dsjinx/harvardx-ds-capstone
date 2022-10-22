@@ -11,7 +11,6 @@ library(GGally)
 data <- fread(unzip("AdultCensusIncome.zip"))
 data <- fread("../CYO/adult.csv")
 setwd("../CYO")
-ogdata <- fread("adult.csv")
 
 ###########data exploration##########
 str(data)
