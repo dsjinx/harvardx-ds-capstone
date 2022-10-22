@@ -6,8 +6,9 @@ library(e1071)
 library(caretEnsemble)
 library(GGally)
 
-#https://www.kaggle.com/datasets/uciml/adult-census-income
-#github: 
+#kaggle: www.kaggle.com/datasets/uciml/adult-census-income
+#github: github.com/dsjinx/harvardx-ds-capstone/blob/main/CYO/AdultCensusIncome.zip
+data <- fread(unzip("AdultCensusIncome.zip"))
 data <- fread("../CYO/adult.csv")
 setwd("../CYO")
 ogdata <- fread("adult.csv")

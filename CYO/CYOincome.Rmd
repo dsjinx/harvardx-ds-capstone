@@ -46,9 +46,11 @@ library(GGally)
 #www.kaggle.com/datasets/uciml/adult-census-income
 #or 
 #github.com/dsjinx/harvardx-ds-capstone/blob/main/CYO/AdultCensusIncome.zip
-#use the function in below to read the zip file
-wd <- getwd()
-data <- paste(wd, )
+
+#copy the downloaded zip file into your current working directory
+getwd()
+#read the dataset in the environment named as "data"
+data <- fread(unzip("AdultCensusIncome.zip"))
 ```
 
 ##Introduction
@@ -579,9 +581,10 @@ The result $F_1$ scores of full predictors and important predictors are 0.624591
 ###5. Ensemble
 In general there are three kinds of ensemble methods: bagging, boosting, and stacking, and we will try to combine our previous models by stacking. The reason is that stacking method treats different models results like predictors, and fit them with a defined meta-model [@Hastie2009-at], and the meta-model options are very versatile, so it can mimic both bagging and boosting with the respective model selection. And because our case is a classification kind problem, we will try logistic regression and adaptive boosting methods as our meta-model to combine the random forest, linear SVM, and logistic regression. 
 
-Because the SVM and logistic regression can only take numeric predictors, we need to decide whether the random forest need to be re-turned for the numeric dataset. We also need to do some pre-processing work to convert the "<=" into "loe", and ">" into "gt" for the two income groups, this is due to the data type requirement by the "caretEnsemble" package we use for implementing the ensemble process. 
+Because the SVM and logistic regression can only take numeric predictors, we need to decide whether the random forest need to be re-turned for the numeric dataset. We also need to do some pre-processing work to convert the "<=" into "loe", and ">" into "gt" for the two income groups, this is due to the data type requirement by the "caretEnsemble" package, what we use for implementing the ensemble process. 
 ```{r eval = FALSE}
-#caretEnsemble pkg does not recognise symbols, need to be replaced by charc
+#"caretEnsemble" pkg does not recognise symbols,
+#need to be replaced by charc
 cnvt_income <- train_svm[, lapply(.SD, 
                              function (j) str_replace(j, "\\>", "gt")), 
                              .SDcols = c("income")]
@@ -596,9 +599,9 @@ cnvtst_income <- cnvtst_income[, lapply(.SD,
 
 train_svm[, income := cnvt_income] 
 test_svm[, income := cnvtst_income]
-```
-```{r eval = FALSE}
-#make sure rf is still consistence in the digitised dataset
+
+#use the tuned parameters from above 
+#to test the "rf" performance on the transformed dataset
 enfit_rf <- train(income ~., data = train_svm, trControl = rfcontrol,
                   method = "rf", tuneGrid = data.frame(mtry = best_mtry),
                   nodesize = best_node, ntree = best_ntree)
@@ -658,10 +661,10 @@ engauge_forest <- confusionMatrix(enpred_forest, as.factor(test_svm$income),
 print(engauge_forest)
 engauge_forest$byClass["F1"]
 ```
-By comparing the two resulting $F_1$ scores, the re-turned result is 0.6878936, which is better but in a very limited scope than the pre-tuned 0.6767642. We will use the re-tuned parameters in our final ensemble. Because we are using the digitised dataset from SVM in above, we can use the same parameters as before for the "glm" and "svmLinear2". 
+By comparing the two result $F_1$ scores, the re-turned result is 0.6878936, which is better but in a very limited scope than the pre-tuned 0.6767642. We choose to use the re-tuned parameters in our final ensemble. Because we are using the digitised dataset from SVM in above, we can use the same parameters as before for the "glm" and "svmLinear2". 
 ```{r eval = FALSE}
-#5-fold cross validation used to create dependent probs for later use
-#although we have define all the turned parameters in place
+#5-fold cross validation used to create dependent probs from learning
+#for later use in the combining process
 crEnsem <- trainControl(method = "cv", index = ind_cv, 
                         savePredictions = "final", classProbs = TRUE)
 ensemble_fit <- caretList(income ~., data = train_svm, trControl = crEnsem,
@@ -675,7 +678,7 @@ ensemble_fit <- caretList(income ~., data = train_svm, trControl = crEnsem,
                                   nodesize = enbest_node,
                                   ntree = enbest_ntree)))
 
-#stacking by logistic regression
+#stacking by "logistic regression"
 stack <- caretStack(ensemble_fit, method = "glm", 
                     trControl = trainControl(method = "boot", number = 5, 
                                              savePredictions = "final"))
@@ -688,7 +691,7 @@ gauge_stack <- confusionMatrix(pred_stack, as.factor(test_svm$income),
 gauge_stack$byClass["F1"]
 ```
 ```{r eval = FALSE}
-#stacking by adaptive boosting
+#stacking by "adaptive boosting"
 stack_boost <- caretStack(ensemble_fit, method = "AdaBoost.M1", 
                           trControl = trainControl(method = "boot", number = 5, 
                                                    savePredictions = "final"))
@@ -700,14 +703,16 @@ gauge_stackbst <- confusionMatrix(pred_stack, as.factor(test_svm$income),
 ```{r echo = FALSE}
 gauge_stackbst$byClass["F1"]
 ```
-The interesting results show that the two different meta-models are giving us the exact same $F_1$ scores 0.6879334. We can suspect that this results are caused by first the two stacking meta-models we use are all voting decision based, which use the consensus of across the results those three base models. Secondly these three base models are generating about the same prediction results as shown in below. According to the 'vignette' of the "caretEnsemble" package, we should consider to select the uncorrelated or at least weak correlated models for ensemble [@ensemble]. The original numeric and categorical data attributes data structure actually creates a paradox of choosing uncorrelated models and without modifying the dataset. We believe the process of digitise those qualitative values can loose the real information in those attributes at some substantial level. But if we do not digitise those qualitative values, then we have very limited choices of models to choose from, basically only the tree family we can possibly use. 
+The results are interesting, the two different meta-models are giving us the exact same $F_1$ scores 0.6879334. We suspect the same results are caused by two possible reasons. Firstly, the two stacking meta-models we use are all voting decision based, which use the consensus from the results of those three base models. Secondly, these three base models are generating about the same prediction results as shown in below. According to the 'vignette' of the "caretEnsemble" package, we should consider to select the uncorrelated or at least weak correlated base models for ensemble [@ensemble]. The original numeric and categorical attributes data structure actually creates a paradox of choosing uncorrelated models and without modifying the dataset. We believe the process of digitising those qualitative values can loose the real information of those attributes at some level. But if we do not digitise those qualitative values, then we have very limited choices of models to choose from, basically only the tree family we can possibly use. 
 ```{r echo = FALSE}
 modelCor(resamples(ensemble_fit))
 ```
 
 ##Conclusion
-By comparing all the methods we tested from above, it conclude that the best performing result is the random forest with the $F_1$ score ??, and it even outperformed the three models stacking method. But by comparing across all the tested methods $F_1$ scores, there are not much difference between them, except the dummy guessing method. This report in overall proves that, for a quantitative and qualitative mixed attributes dataset, the most effective algorithm would be the forest based. 
+By comparing all the methods we have tested in above, it concludes that the best performing result is the random forest having the $F_1$ score of 0.6908837, and it even outperformed the stacking method, but the difference is not major. By comparing the across all individual methods $F_1$ scores, The trees family methods outperform other numeric methods. This report in overall proves that, for a quantitative and qualitative mixed attributes dataset, the most effective algorithm would be the tree based. 
 ```{r echo = FALSE}
 knitr::kable(summary)
 ```
-The last thing we want to justify is that, even the best result $F_1$ score is still under 0.7, a very mediocre number. That is because the two income groups in our dataset is highly unbalanced with a 75/25 distribution ratio, and our target ">50K" group is the under sampled one. Since the $F_1$ score only cares about the specified class ">50K", it tells us how good our prediction in the purely ">50K" showing environment, and also both classes showing environment. So to improve the $F_1$ score, we could try to increase the result in either environment. The possible approaches could be using a more sophisticate way to digitise those qualitative attributes, then we might be able to achieve a better result from SVM, in addition we can also try to train it by a neural net. In terms of the stacking, with a better digitised dataset, we may be able to find some uncorrelated methods to achieve a better ensemble result. 
+The last thing we want to justify is that, even the best result $F_1$ score is still under 0.7, a very mediocre number by considering the range of $F_1$ is [0, 1]. That is because the two income groups in our dataset is highly unbalanced with a 75/25 distribution ratio, and our target ">50K" group is the under sampled one. Since the $F_1$ score only cares about the specified class of ">50K", it tells us how good our prediction in both the only ">50K" showing environment, and both income groups showing environment. In order to improve the $F_1$ score, we could try to increase the result in either environment. The possible approaches would be using a more sophisticate way to digitise those qualitative attributes, then we might be able to achieve a better result from the SVM, and also can fit with the popular neural net. In terms of the stacking, with a better digitised dataset, we may be able to find some uncorrelated methods to achieve a better ensemble result. 
+
+##References
