@@ -585,11 +585,14 @@ impgauge_glm <- confusionMatrix(imppred_glm, imptest_svm$income,
                              mode = "prec_recall",
                              positive = ">50K")
 ```
-```{r eval = FALSE}
+```{r echo = FALSE}
 print(impgauge_glm)
 impgauge_glm$byClass["F1"]
 ```
 The result $F_1$ scores of full predictors and important predictors are 0.6245919 and 0.6242315 respectively, so we can conclude that the logistic regression is performing the same over these two datasets. After all those methods we have tried by now, it is instantaneously for us to think about combining them in together with ensemble method. 
+```{r echo = FALSE}
+knitr::kable(sum_glm) #table is generated in code file
+```
 
 ### 5. Ensemble  
 In general there are three kinds of ensemble methods: bagging, boosting, and stacking, and we will try to combine our previous models by stacking. The reason is that stacking method treats different models results like predictors, and fit them with a defined meta-model [@Hastie2009-at], and the meta-model options are very versatile, so it can mimic both bagging and boosting with the respective model selection. And because our case is a classification kind problem, we will try logistic regression and adaptive boosting methods as our meta-model to combine the random forest, linear SVM, and logistic regression. 

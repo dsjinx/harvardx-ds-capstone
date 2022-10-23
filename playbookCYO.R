@@ -535,7 +535,11 @@ impgauge_glm <- confusionMatrix(imppred_glm, imptest_svm$income,
                              positive = ">50K")
 print(impgauge_glm)
 impgauge_glm$byClass["F1"] #about the same
-#??table summarise glm
+
+sum_glm <- data.table(Attributes = c("full", "important"),
+                      F_1 = c(gauge_glm$byClass["F1"], 
+                              impgauge_glm$byClass["F1"]))
+knitr::kable(sum_glm)
 
 #5. ensemble
 ##caretEnsemble pkg does not recognise symbols, need to be replaced by charc

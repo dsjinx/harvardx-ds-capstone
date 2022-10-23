@@ -466,6 +466,11 @@ impgauge_glm <- confusionMatrix(imppred_glm, imptest_svm$income,
 print(impgauge_glm)
 impgauge_glm$byClass["F1"] #two results are about the same
 
+sum_glm <- data.table(Attributes = c("full", "important"),
+                      F_1 = c(gauge_glm$byClass["F1"], 
+                              impgauge_glm$byClass["F1"]))
+knitr::kable(sum_glm)#glm summary table
+
 #5. ensemble
 #caretEnsemble pkg does not recognise symbols, need to be replaced by charc
 cnvt_income <- train_svm[, lapply(.SD, 
