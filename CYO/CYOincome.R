@@ -56,7 +56,7 @@ ggplot(plot_temp, aes(income, pct)) +
   geom_text(aes(label = format(round(pct, 2), nsmall = 2)),
             vjust = 2, color = "white")
 
-##numeric features 1st
+#numeric features 1st
 names(data)
 cols <- names(which(sapply(data, class) == "integer"))
 summary(data[, ..cols]) #check for strange value
@@ -69,6 +69,7 @@ summary(num_fp) #check unusual outlier
 ind_min <- num_fp[, lapply(.SD, which.min)]
 ind_max <- num_fp[, lapply(.SD, which.max)]
 ind_out <- rbind(ind_min, ind_max)
+#browse the extremes
 outliers <- data.table(
   outlier = c("min", "max"),
   age = data$age[ind_out$age],
@@ -97,10 +98,10 @@ featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "pairs",
 char_cols <- names(data)[-which(names(data) %in% cols)][-9]
 
 #check the missing ?
-sum(data == "?") / (dim(data)[1] * dim(data)[2])
+sum(data == "?") / (dim(data)[1] * dim(data)[2]) #overall % of ?
 mis_locate <- data[, lapply(.SD, function(i) sum(i == "?")), 
                    .SDcols = char_cols]
-mis_locate / dim(data)[1] * 100
+mis_locate / dim(data)[1] * 100 #column wise % of ?
 
 char_fp <- data[, ..char_cols]
 char_fp <- char_fp[, lapply(.SD, as.factor)] 
@@ -161,7 +162,7 @@ registerDoParallel(cores = 4)
 set.seed(2, sample.kind = "Rounding") #5 fold cv
 ind_cv <- createFolds(1:dim(train)[1], k = 5, returnTrain = TRUE)
 
-#define the cv index can make the train to be reproducible
+#define the cv index can make the training process to be reproducible
 treecontrol <- trainControl(method = "cv", index = ind_cv)
 fit_tree <- train(income ~ ., data = train, method = "rpart",
                   trControl = treecontrol, 
@@ -383,7 +384,7 @@ sum_linpoly <- data.table(Kernel = c("polynomial", "linear"),
                                        lingauge_svm$byClass["F1"]))
 knitr::kable(sum_linpoly) #table to compare F_1
 
-#mini sample proved in high dimension predictors, linear kernel is good enough 
+#mini sample proved for high dimensional data, linear kernel is good enough 
 #to produce a favourable result
 #also proved large sample size can improve performance
 
@@ -441,9 +442,10 @@ knitr::kable(sum_impfull)
 #impsvm is best, but just slightly better than full predictor linear svm
 
 #4. glm
+#fit with full attributes
 fit_glm <- train(income ~., data = train_svm, method = "glm", 
                  family = binomial)
-fit_glm$finalModel #?
+fit_glm$finalModel 
 
 pred_glm <- predict(fit_glm, test_svm)
 gauge_glm <- confusionMatrix(pred_glm, test_svm$income, 
@@ -452,6 +454,7 @@ gauge_glm <- confusionMatrix(pred_glm, test_svm$income,
 print(gauge_glm)
 gauge_glm$byClass["F1"]
 
+#fit with important attributes tested in svm above
 impfit_glm <- train(income ~., data = imptrain_svm, method = "glm", 
                     family = binomial)
 impfit_glm$finalModel
