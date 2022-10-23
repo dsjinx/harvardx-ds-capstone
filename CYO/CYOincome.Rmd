@@ -145,8 +145,9 @@ From the following block of bar plots, we can have a visual understanding of wha
 char_fp <- data[, ..char_cols]
 char_fp <- char_fp[, lapply(.SD, as.factor)] 
 char_fp <- char_fp[, income := data$income]
-setDF(char_fp) #the following plot function need the data to be data frame
 
+#the following recursive plot function need the data to be data frame
+setDF(char_fp) 
 ggp1 <- lapply(1:3, function(j){
   ggplot(char_fp, aes(x = char_fp[,j], fill = income)) + 
     geom_bar() + scale_y_log10() + 
