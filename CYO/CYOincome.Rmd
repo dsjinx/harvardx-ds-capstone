@@ -15,7 +15,7 @@ library(GGally)
 load("rmdrun.RData")
 ```
 ## Executive Summary  
-This report is going to try different methods to achieve a good $F_1$ score on the target "income" class among all the surveyed candidates. The used Adult Income Census dataset has two income classes: "<= 50K" and ">50K". The goal is to try to predict all the ">50K" income samples in the testset, while the challenge is coming from the class dominance of "<=50K", what makes our target ">50K" class to be severely short-sampled, so it is hard to achieve a good prediction accuracy for the target ">50K" income class. The methods used in this report include CART (classification and regression tree), random forest, SVM (support vector machine), and logistic regression. The best performing individual method is random forest with a $F_1$ score of 0.6908837. In addition, the stacking method is tested to combine the tuned random forest, SVM, and GLM, and the achieved $F_1$ score is 0.6879334. The results suggest the random forest is the best performing method among all the individual and ensemble methods tested on the dateset. 
+This report is going to try different methods to achieve a good $F_1$ score on the target "income" class among all the surveyed candidates. The used Adult Income Census dataset has two income classes: "<= 50K" and ">50K". The goal is trying to predict all the ">50K" income samples in the testset, while the challenge is coming from the class dominance of "<=50K", what makes our target ">50K" class to be severely short-sampled, so it is hard to achieve a good prediction accuracy for the target ">50K" income class. The methods used in this report include CART (classification and regression tree), random forest, SVM (support vector machine), and logistic regression. The best performing individual method is random forest with a $F_1$ score of 0.6908837. In addition, the stacking method is tested to combine the tuned random forest, SVM, and GLM, and the achieved $F_1$ score is 0.6879334. The results suggest the random forest is the best performing method among all the individual and ensemble methods tested on the dateset. 
 ```{r eval = FALSE}
 #libraries are used in this report
 if(!require(tidyverse))
@@ -54,22 +54,22 @@ data <- fread(unzip("AdultCensusIncome.zip"))
 ```
 
 ##  Introduction  
-We are going to apply different but not exhaustive classification methods in this report. The $F_1$ score is used as evaluation metric, the reason is coming from the unbalanced sample size in the dataset. The Adult Income Census datast we use in this report classifies the income levels into two groups, one is "<=50K", and the other is ">50K", but the ">50K" class has much smaller sample size comparing to "<=50" class. According to @nielsen_2015 and many practical machine learning texts, increased sample size can effectively result a good learning performance, but on the contrary a small sample size can hinder the training result. So we choose to evaluate the candidate methods by the balanced $F_1$ score, which can give us a good evaluation over the sensitivity and specificity of different models on the target ">50K" income class. This characteristic of $F_1$ score makes it a rather effective metric comparing with the overall accuracy, which can falsely report us a high value, due to the high accuracy contribution from the big sample size in "<=50K" class. 
+We are going to apply different but not exhaustive classification methods in this report. The $F_1$ score is used as evaluation metric, the reason is coming from the unbalanced sample size in the dataset. The Adult Income Census datast we use in this report classifies the income levels into two groups, one is "<=50K", and the other is ">50K", but the ">50K" class has much smaller sample size comparing to "<=50" class. According to @nielsen_2015 and many practical machine learning texts, increased sample size can effectively result a good learning performance, but on the contrary a small sample size can hinder the model performance. So we choose to evaluate the candidate methods by the balanced $F_1$ score, which can give us a good evaluation over the sensitivity and specificity of different models on the target ">50K" income class. This feature of $F_1$ score makes it a rather effective metric comparing to the overall accuracy, which can falsely report us a high value, due to the high accuracy contribution from the big sample size in "<=50K" class. 
 
-The following content is broken into three parts. In the data exploration, we will explore the data in a top-down strategy, by having a broad view of the dataset structure first, then break the attribute predictors into groups according to the type of the element values, and look for any trend or relations across those attributes. After that, we will get into the methods in details. We will justify the logic behind choosing those candidate methods to be tested in this report. Lastly, we will evaluate the overall performances across different methods applied, and discuss about what other possible approaches may be taken to improve the performance in further. 
+The following content is broken into three parts. In the data exploration, we will explore the data in a top-down strategy, by having a broad overview of the dataset structure first, then break the attribute predictors into groups according to the type of the element values, and look for any trend or relations across those attributes. After that, we will get into the methods in details, we justify the logic behind choosing those candidate methods to be tested in this report. Lastly, we will evaluate the overall performances across different methods applied, and discuss about what other possible approaches may be taken to improve the performance in further. 
 
 ## Data Exploration  
-The [Adult Census Income](www.kaggle.com/datasets/uciml/adult-census-income) dataset used in this report is from the 1994 Census bureau database. This dataset has the dimension of 32561 by 15. It has samples in rows, and measured variables in columns, so every single sample has 14 different attributes, plus one income class information, and there are 32561 samples in total. 
+The [Adult Census Income](www.kaggle.com/datasets/uciml/adult-census-income) dataset used in this report is from the 1994 Census bureau database. This dataset has the size of 32561 by 15. It has samples in rows, and measured variables in columns, so every single sample has 14 different features, plus one income class information, and there are 32561 samples in total. 
 ```{r echo  = FALSE}
 str(data)
 ```
-The attributes are measured both quantitatively and qualitatively with respect to numeric/integer value columns and character value columns. The dependent variable "income" is what we are trying to predict, and it is in a qualitative form with only two different categories: "<=50K" and ">50K". This two classes element structure can help us narrow down the possible methods used will be either producing "YES"/"NO" results, or giving the probability toward each category.
+The attributes are measured both quantitatively and qualitatively with respect to numeric/integer value columns and character value columns. The dependent variable "income" is what we are trying to predict, and it is in a qualitative form with only two different categories: "<=50K" and ">50K". This two classes element structure can help us narrow down the possible methods used to be either producing "YES"/"NO" results, or giving the probability toward each category.
 ```{r echo  = FALSE}
 sapply(data, function(j) class(j))
 ```
 
 ### Data Visualisation  
-Before we explore the data in further details, we want to check on the dataset for the strange and missing values. There is no "NA" value in the dataset, but we can see some "?" showing in "workclass", "occupation", and "native.country" in below table. They are all in the qualitative attributes columns, and recorded in character string. However we will decide the way to handle them, when we explore these attributes in details. 
+Before we explore the data in further details, we want to check on the dataset for the strange and missing values. There is no "NA" value in the dataset, but we can see some "?" showing in "workclass", "occupation", and "native.country" as in below table. They are all in the qualitative attributes columns, and recorded in character string. However we will decide the way to handle them, when we explore these attributes in details. 
 ```{r}
 sum(is.na(data))
 ```
@@ -106,7 +106,7 @@ num_fp <- data[, ..cols][, lapply(.SD,
               function(j) (j - mean(j)) / sd(j)), .SDcols = cols]
 summary(num_fp) #check potential outliers by normalising the columns
 ```
-After we normalise all the "integer" columns, we get a much clearer picture about how far away those outliers are. The boxplots in below illustrate our findings in further details. All of these six numeric attribute columns have many outliers indeed, and majority of the outliers are locating in the upper extreme, except for the "weekly working hour" and "number of years education taken", the outliers in those two attributes are locating in both upper and lower extremes. By comparing the distributions between "<=50K" on the left and ">50K" on the right, the age attribute is showing a reasonable distribution to illustrate that, the strong earning group's age range are a bit older than "<=50K" group, but the upper bound age is lower than "<=50K" group, the logic behind might be the ">50K" group may retire at a comparable younger age than the "<=50K" group. Meanwhile, the distribution of years of education is telling us that, the extra number of years we invest in study have very high possibility to reward us a good income in later days. At the same time, the weekly working hour shows the hard work pays off as in everybody's belief. Next we will look into the relations in between those numeric attributes under different income groups. 
+After we normalise all the "integer" columns, we get a much clearer picture about how far away those outliers are. The boxplots in below illustrate our findings in further details. All of these six numeric attribute columns have many outliers indeed, and majority of the outliers are locating in the upper extreme, except for the "weekly working hour" and "number of years education taken", the outliers in those two attributes are locating in both upper and lower extremes. By comparing the distributions between "<=50K" on the left and ">50K" on the right, the age attribute is showing a reasonable distribution to illustrate that, the strong earning group's age range are a bit older than "<=50K" group, but the upper bound age is lower than "<=50K" group, the logic behind might be the ">50K" group may retire at a comparable younger age than the "<=50K" group. Meanwhile, the distribution of years of education is telling us that, the extra number of years we invest in study have very high possibility to reward us a good income in later days. At the same time, the weekly working hour shows the hard work pays off as in everybody's belief. Next we will look into the relations in between those numeric attributes under different income groups.
 ```{r echo = FALSE}
 num_fp <- num_fp[, income := data$income]
 
@@ -115,21 +115,23 @@ featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "box",
                           x = list(rot = 90)),
             layout = c(3, 2), auto.key = list(columns = 2))
 ```
+By inspecting the scatter plots matrix in below, none of the pairs out of those six numeric attributes are showing any clear trend or correlations, instead all the pairs are really just random clusters. And this kind of non-correlated randomness are shared in both "<=50k" and ">50K" income groups. The only meaningful find out in those pairs is related to the "capital gain". For all the five pairs boxes between the "capital gain" and the other 5 attributes, we can see all the top valued in "capital gain" points are pink, which represent the ">50K" high income group. 
+
+**(to be continued on next page)**
+
 ```{r echo = FALSE, warning = FALSE}
-trellis.par.set("fontsize", list(text = 8.5))
+trellis.par.set("fontsize", list(text = 8))
 featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "pairs", 
             auto.key = list(columns = 2))
 ```
-By inspecting the scatter plots matrix in above, none of the pairs out of those six numeric attributes are showing any clear trend or correlations, instead all the pairs are really just random clusters. And this kind of non-correlated randomness are shared in both "<=50k" and ">50K" income groups.
-
-We now turn to the character class attributes. But before we move on, we need to decide how we are going to treat those "?" from the exploration in above. Firstly, we want to have a general idea about the how many of them are there in our dataset, because from the total number of them, we can evaluate the potential harm of having them in place, then we decide how they could be treated to fit in our models later.
+We now turn to the character class attributes. But before we move on, we need to decide how we are going to treat those "?" from the exploration in above. Firstly, we want to have a general idea about how much portion of our dataset is "?", because from the size of them, we can evaluate the potential harm of having them in place, then we decide how they could be treated to fit in our models later.
 ```{r}
 #collect all the char columns for future process
 char_cols <- names(data)[-which(names(data) %in% cols)][-9]
 
 ###check the missing ?
 sum(data == "?") / (dim(data)[1] * dim(data)[2])
-mis_locate <- ogdata[, lapply(.SD, function(i) sum(i == "?")), 
+mis_locate <- data[, lapply(.SD, function(i) sum(i == "?")), 
                    .SDcols = char_cols]
 data.frame(var.name = names(mis_locate),
            pct.in.data = as.numeric(100 * mis_locate / dim(data)[1])) %>% 
@@ -137,7 +139,7 @@ data.frame(var.name = names(mis_locate),
 ```
 The above figures show that the "?" issue is not major, which is only 0.87% out of the whole dataset. In the column wise, we have seen the "?" only exists in three columns, and only "work class" and "occupation" have 5% of the data are recorded in "?", the "native.country" has less than 2% out of the total. So those "?" values are too small to cause our dataset being sparse in the whole. Also the good thing about the locations of them is that, none of the "?" is in the dependent "income" column, that means all the rows are valid samples can be classified. The other good thing is that, they are all categorical data, if we use a tree method to train them, they will not cause any problem in those kind of "YES"/"NO" logical rules. So we will leave them in place for now, and only treat them on an ad hoc basis.
 
-From the following block of bar plots, we can have a visual understanding of what the major class is in each attribute, that makes a surveyed sample to be a ">50K" income earner. The way to visually decide a major driver of one income group is that, if there is big gap for a same attribute value showing across the two income groups. For example, the "workclass" attribute is clearly showing that the "never worked" and "without pay" are the two major attribute elements can help distinguish the "<=50K" from the ">50K" income group. The "education" attribute has a very interesting find out, it shows that those highly educated candidates with degrees in bachelor, master, and doctor are not primarily clustered in high income group, instead there is quite a lot of them are in "<=50K" income group. That is very counter intuitive with the findings from the education years in above numeric attributes. Apart from that, the attributes allocation between the two income groups are quite similar. 
+From the following block of bar plots, we can have a visual understanding of what the major class is in each attribute, that makes a surveyed sample to be a ">50K" income earner. The way to visually decide a major driver of one income group is that, if there is big gap for a same attribute value showing across the two income groups. For example, the "workclass" attribute is clearly showing that the "never worked" and "without pay" are the two major attribute elements can help distinguish the "<=50K" from the ">50K" income group. The "education" attribute has a very interesting find out, it shows that those highly educated candidates with degrees in bachelor, master, and doctor are not primarily clustered in high income group, instead there is quite a lot of them are in "<=50K" income group. That is very counter intuitive with the findings from the education years in above numeric attributes. 
 ```{r echo = FALSE}
 #create the character column only data frame
 char_fp <- data[, ..char_cols]
@@ -162,6 +164,10 @@ ggp2 <- lapply(4:6, function(j){
 })
 ggmatrix(ggp2, nrow = 1, ncol = 3, xAxisLabels = char_cols[4:6])
 ```
+We can also see some absolute differences between the two groups. For "workclass", the "never worked" and "without pay" are totally missing in the high income group for the obvious reason. As well as for the missing "pre-school" class in "education". The missing "armed-force" and "private-house-server" of "occupation" in high income group is also telling us those jobs are not likely to pay us great. Apart from that, the attributes allocation between the two income groups are quite similar in general. 
+
+**(to be continued on next page)**
+
 ```{r echo = FALSE}
 ggp3 <- lapply(7:8, function(j){
   ggplot(char_fp, aes(x = char_fp[,j], fill = income)) + 
@@ -228,6 +234,9 @@ fit_tree <- train(income ~ ., data = train, method = "rpart",
               trControl = treecontrol, 
               tuneGrid = data.frame(cp = seq(0, 0.1, length.out = 10)))
 ```
+
+**(to be continued on next page)**
+
 ```{r echo = FALSE}
 plot(fit_tree)
 ```
@@ -452,6 +461,9 @@ tune_cg <- foreach(j = 1:dim(para_grid)[1], .combine = cbind.data.frame,
 tune_acc <- apply(tune_cg, 2, mean)
 best_cg <- para_grid[which.min(tune_acc), ]
 ```
+
+**(to be continued on next page)**
+
 ```{r echo = FALSE}
 qplot(1:dim(tune_cg)[2], tune_acc, geom = c("point", "line"))
 ```
@@ -643,6 +655,9 @@ entune_ntree <- sapply(en_ntrees, function(nt){
         ntree = nt)$results$Accuracy})
 enbest_ntree <- ntrees[which.max(entune_ntree)]
 ```
+
+**(to be continued on next page)**
+
 ```{r echo = FALSE}
 qplot(en_ntrees, entune_ntree, geom = c("point", "line"))
 ```
