@@ -96,19 +96,23 @@ rm(plot_temp)
 This unbalanced sample size can potentially make it more challenging to achieve a high accuracy on predicting the ">50K" income group, comparing to the "<=50K" ones. The reason is that, we have more samples to train for the "<=50K" group, but the ">50K" group is short-sampled, so if the two different group samples are not separately clustered, or lack of strong manifestations with the 14 attributes, then we can only reply on minimising the error on "<=50K" group to improve the ">50K" group accuracy. On the other hand, this could be viewed as a benefit of having only two groups of dependents to work with. 
 
 As mentioned in above, there are two different classes of predictors: "integer" and "character", and we are going to look those two classes of attributes separately. We will look the "integer" class first. 
+```{r eval = FALSE}
+#collect the numeric cols names
+cols <- names(which(sapply(data, class) == "integer")) 
+```
 ```{r}
-cols <- names(which(sapply(data, class) == "integer"))
 summary(data[, ..cols]) #check any strange value
 ```
 The above lot of "integer" columns summary is not showing any strange numbers, except the "capital.gain" and "capital.loss" columns have 0 values for most of their statistics. It makes sense that if most people are earning less than 50K/year, then most of them won't have any investment asset in place. Apart from this, the column "fnlwgt" we need to make some clarification about its meaning in here. It is stand for "final weight", simply speaking it represents the amount of people is sharing the same attributes of the row, where that "fnlwgt" value is. Of course the census bureau has more rigorous explanation on it, but we just want to highlight its basic meaning to avoid the ambiguity caused by the "weight" in its name. 
 ```{r}
 num_fp <- data[, ..cols][, lapply(.SD, 
               function(j) (j - mean(j)) / sd(j)), .SDcols = cols]
+
 summary(num_fp) #check potential outliers by normalising the columns
 ```
 After we normalise all the "integer" columns, we get a much clearer picture about how far away those outliers are. The boxplots in below illustrate our findings in further details. All of these six numeric attribute columns have many outliers indeed, and majority of the outliers are locating in the upper extreme, except for the "weekly working hour" and "number of years education taken", the outliers in those two attributes are locating in both upper and lower extremes. By comparing the distributions between "<=50K" on the left and ">50K" on the right, the age attribute is showing a reasonable distribution to illustrate that, the strong earning group's age range are a bit older than "<=50K" group, but the upper bound age is lower than "<=50K" group, the logic behind might be the ">50K" group may retire at a comparable younger age than the "<=50K" group. Meanwhile, the distribution of years of education is telling us that, the extra number of years we invest in study have very high possibility to reward us a good income in later days. At the same time, the weekly working hour shows the hard work pays off as in everybody's belief. Next we will look into the relations in between those numeric attributes under different income groups.
 ```{r echo = FALSE}
-num_fp <- num_fp[, income := data$income]
+num_fp <- num_fp[, income := data$income] #add the income col for plotting
 
 featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "box", 
             scales = list(y = list(relation = "free"),
@@ -125,12 +129,14 @@ featurePlot(x = num_fp[, 1:6], y = num_fp$income, plot = "pairs",
             auto.key = list(columns = 2))
 ```
 We now turn to the character class attributes. But before we move on, we need to decide how we are going to treat those "?" from the exploration in above. Firstly, we want to have a general idea about how much portion of our dataset is "?", because from the size of them, we can evaluate the potential harm of having them in place, then we decide how they could be treated to fit in our models later.
-```{r}
+```{r eval = FALSE}
 #collect all the char columns for future process
 char_cols <- names(data)[-which(names(data) %in% cols)][-9]
-
+```
+```{r}
 ###check the missing ?
 sum(data == "?") / (dim(data)[1] * dim(data)[2])
+
 mis_locate <- data[, lapply(.SD, function(i) sum(i == "?")), 
                    .SDcols = char_cols]
 data.frame(var.name = names(mis_locate),
@@ -148,6 +154,7 @@ char_fp <- char_fp[, income := data$income]
 
 #the following recursive plot function need the data to be data frame
 setDF(char_fp) 
+
 ggp1 <- lapply(1:3, function(j){
   ggplot(char_fp, aes(x = char_fp[,j], fill = income)) + 
     geom_bar() + scale_y_log10() + 
