@@ -212,7 +212,7 @@ sum(test$income == "<=50K") / dim(test)[1]
 ```
 
 ### 1. One tree  
-Now we are turning to the property algorithms. We will start with a single CART tree by using the "rpart" package. According to the package vignettes, there are a list of parameters can be tuned to affect the model performance, but the most effective one is complexity parameter "cp" [@r-rpart]. It is the parameter to decide how the tree is going to be pruned from the default tree, which is grown by the set of system default parameters. The "cp" value is meant to be in the range of [0, 1], when "cp" = 1 then the tree could be a stick with no branches at all, which can be defined as the case of under trained. When the "cp" = 0 could cause the tree to have the number of branches to be the total number of elements of the whole dataset - 1, alternatively it is to be said the model is very over trained. We will need to find the best value to fit our purpose. And for the minimum number of samples to create more branches split, and the minimum samples to be in a terminal node, we will just use the default values for them. The "raprt" package is made to be able to handle missing values with the surrogate parameters, even though we have some small fraction of predictors are missing and recorded in "?", but we will arbitrarily treat them as a valid class value, since they are all recorded as character strings inside the character attributes columns, they can only be possibly used for creating some "YES/NO" based classification rules, without any numerical calculation on them. 
+Now we are turning to the property algorithms. We will start with a single CART tree by using the "rpart" package. According to the package vignettes, there are a list of parameters can be tuned to affect the model performance, but the most effective one is complexity parameter "cp" [@r-rpart]. It is the parameter to decide how the tree is going to be pruned from the default tree, which is grown by the set of system default parameters. The "cp" value is meant to be in the range of [0, 1], when "cp" = 1 then the tree could be a stick with no branches at all, what can be defined as the case of under training. When the "cp" = 0 could cause the tree to have the number of branches to be the total number of elements of the whole dataset - 1, alternatively it is to be said the model is very over trained. We then need to find the best value to fit our purpose. For the minimum number of samples to create more branches split, and the minimum samples to be in a terminal node, we will just use the default values for them. The "raprt" package is made to be able to handle missing values with the surrogate parameters, meanwhile we have a small fraction of predictors are missing and recorded in "?", but we will arbitrarily treat them as a valid class value, since they are all recorded as character strings inside the character attributes columns, and they can only be possibly used for creating some "YES/NO" based classification rules, without any numerical calculation on them. 
 ```{r eval = FALSE}
 registerDoParallel(cores = 4) 
 #caret can parallel the process to speed up the training
@@ -234,8 +234,9 @@ plot(fit_tree)
 ```{r echo = FALSE}
 fit_tree$finalModel
 ```
-The cross validation results suggest when "cp" = 0.01111111, the model can provide us a favourable result. From the printing of the final mode, it shows our final tree has six leaf nodes or terminal nodes marked by the $\ast$. In those leafs we can see that the majority of the classifiers are the capital gain and capital loss, which just coincide with our visual findings in above. 
+The cross validation results suggest when "cp" = 0.01111111, the model can provide us a favourable result. From the printing of the final model, it shows our tuned tree has six leaf nodes or terminal nodes marked by the $\ast$. In those leafs we can see that the majority of the classifiers are the capital gain and capital loss, which just coincide with our visual findings in above. 
 ```{r eval = FALSE}
+#use the tuned tree to predict the test set
 pred_tree <- predict(fit_tree, test)
 gauge_tree <- confusionMatrix(pred_tree, test$income, 
                               mode = "prec_recall",
@@ -245,10 +246,10 @@ gauge_tree <- confusionMatrix(pred_tree, test$income,
 print(gauge_tree)
 gauge_tree$byClass["F1"]
 ```
-The final $F_1$ score of our single tree is 0.6372981, which is very encouraging, comparing to 0.246413 of the guessing benchmark, and that is 158% improvement. At the same time the kappa ratio 0.5445 is telling us our higher overall accuracy is not by luck. 
+The final $F_1$ score of our single tree is 0.6372981, which is very encouraging comparing to 0.246413 of the guessing benchmark, and that is 158% improvement. At the same time the kappa ratio 0.5445 is telling us our higher overall accuracy is not by luck. 
 
 ### 2. Forest  
-Since we have tried the tree method, then the forest method can not be ignored in the tree family. As stated in Prof. Irizarry's text, random forests can improve the single decision tree performance by bagging on multiple smaller trees [@irizarry_2022]. The logic behind the bagging is that, instead of growing one tree out of all the available 14 predictors, we randomly pick "mtry" number of predictors to grow "ntree" number of small trees, the size of the trees is defined by the "nodesize", with smaller trees having larger "nodesize". So with the central idea of bagging, we would avoid to have the situation we faced in above single tree, where very few predictors such as "capital gain" and "capital loss", that dominate the majority of the decision rules. This could be a sign of under training. And there also could be the case of over training in a tree, if the rule of branch splitting is too granular, then the bagging method can also accommodate this situation. 
+Since we have tried the tree method, then the forest method can not be ignored in the tree family. As stated in Prof. Irizarry's text, random forests can improve the single decision tree performance by bagging on multiple smaller trees [@irizarry_2022]. The logic behind the bagging is that, instead of growing one tree out of all the available 14 predictors, we randomly pick "mtry" number of predictors to grow "ntree" number of small trees, the size of the trees is defined by the "nodesize", with smaller trees having larger "nodesize". So with the central idea of bagging, we would avoid to have the situation we faced in above single tree, where very few predictors such as "capital gain" and "capital loss", that comprise the majority of the decision rules. This could be a sign of under training. And there also could be the case of over training in a tree, if the rule of branch splitting is too granular, then the bagging method can also accommodate this situation. 
 
 As we described in above, we will tune our "randomForest" with three major parameters: "mtry", "nodesize", "ntree" in a sequential form. 
 ```{r eval = FALSE}
@@ -293,6 +294,7 @@ qplot(ntrees, tune_ntree, geom = c("point", "line"))
 ```
 The above turning process suggest that the optimised forest is composed by "ntrees" = 180 trees, the minimum leaf size "nodesize" = 3, which means the trees in the forest are quite large, and the number of predictors "mtry" we use to grow each tree is 12, almost include all the 14 available predictors. Then we check on the performance on test set in below. 
 ```{r eval = FALSE}
+#test the tuned forest
 fit_forest <- train(income ~., data = train, method = "rf",
                      tuneGrid = data.frame(mtry = best_mtry),
                      nodesize = best_node,
@@ -310,15 +312,13 @@ gauge_forest$byClass["F1"]
 The final $F_1$ score 0.6908837 does meet our initial expectation of achieving a better performance than the single tree in before, although the improvement is very limited for just over 8%. In next we will jump out of trees family to try another approach in a more linear algebra way, which is the Support Vector Machine (SVM). 
 
 ### 3. Support Vector Machine  
-Broadly speaking the SVM is to search a hyperplane that can effectively separate two different class samples in the attributes space. In our case each row of the dataset represents a surveyed sample, which has 14 attributes dimensions, so we are searching a hyperplane inside a 14 dimension space. Intuitively this hyperplane should have the dimension of 13, because in a x-y 2 dimension, it is a single line, and in a x-y-z 3 dimensional space, it is a 2 dimensional plane. According to the original paper, this hyperplane is spanned by the selective vectors out of the original dataset [@Cortes1995]. What it means is that, we believe the two class samples are clustering toward two opposite directions, and those samples at the joint border of the two clusters are considered as supporting vectors. 
+Broadly speaking the SVM is to search a hyperplane that can effectively separate two different class samples in the attributes space. In our case each row of the dataset represents a surveyed sample, which has 14 attributes dimensions, so we are searching a hyperplane inside a 14 dimensional space. Intuitively this hyperplane should have the dimension of 13, because in a x-y 2 dimension, it is a single line, and in a x-y-z 3 dimensional space, it is a 2 dimensional plane. According to the original paper, this hyperplane is spanned by the selective vectors out of the original dataset [@Cortes1995]. What it means is that, we believe the two class samples are clustering toward two opposite directions, and those samples at the joint border of the two clusters are considered as supporting vectors. 
 
-There are two popular SVM packages in R, and we use the LIBSVM based "e1071" package, the LIBSVM is created and maintained by the team from National Taiwan University. We need to tune the model based on the chosen kernel. According to the package document, if the samples are in high dimensions, then the most basic linear kernel would be the best performing choice [@CC01a]. So we will turn the model with linear kernel first, then try different kernel and approaches to compare, whether the basic linear model is the best choice to serve our purpose. 
+There are two popular SVM packages in R, and we use the LIBSVM based "e1071" package, the LIBSVM is created and maintained by the team from National Taiwan University. We need to tune the model based on the chosen kernel. According to the package document, if the samples are in high dimensions, then the most basic linear kernel would be the best performing choice [@CC01a]. So we will turn the model with linear kernel first, then try different kernels and approaches to help us decide, whether the basic linear model is the best choice to serve our purpose. 
 
-Before train the model, we need to make our dataset to fit the algorithm, because the algorithm only works on quantitative data, but not qualitative data. For all the qualitative attributes columns, there are two options to digitise them, one option is to use the 'dummyVars' function from "caret" package can turn those columns' categorical values into binary values, and creating a new column for every categorical data value in addition to the original dataset. For example, in the "education" column, we have 15 different categories of data in place. 
+Before train the model, we need to make our dataset to fit the algorithm requirement, because the algorithm only works on quantitative data, but not qualitative data. For all the qualitative attributes columns, there are two options to digitise them, one option is to use the 'dummyVars' function from "caret" package can turn those columns' categorical values into binary data, and creating a new column for every categorical data value in addition to the original dataset. For example, in the "education" column, we have 15 different categories of data in place. 
 ```{r echo = FALSE}
-ogdata <- fread("adult.csv")
-unique(ogdata$education)
-rm(ogdata)
+unique(data$education)
 ```
 The function 'dummyVars' will create another 15 new columns with the names being those qualitative values. If we use this function on all the 8 qualitative attributes columns, we will have lots of 0's in our new dataset, which means we get a huge sparse dataset. High sparsity could become another risk for our model. The central idea of pre-processing and data cleaning is to fit in the algorithm, and improve the performance, so we will take another approach for those qualitative values. Our approach is to digitise them locally, use the same "education" column example, we will simply mark them with digits accordingly with their position indexes in the result of 'uniqueN' function. For the "?", we will force them to be 0, regardless of their position index, so for the three columns have the "?" values, we will treat them a little differently. 
 ```{r eval = FALSE}
@@ -386,12 +386,11 @@ data_digit <- data_digit[, lapply(.SD, as.numeric)]
 data_digit <- data[, (char_cols) := data_digit]
 str(data_digit)
 
-#same partition index from trees
-#the digitised train/test set
+#same partition index from trees to make the digitised train/test set
 train_svm <- data_digit[-ind, ]
 test_svm <- data_digit[ind, ]
 ```
-After we have the data ready, we will turn the model next. Because we are using the linear kernel first, the only parameter we need to tune is the "cost". This parameter is acting as the Lagrange multiplier in the dual problem for solving the SVM [@Cortes1995]. Geometrically it is the trade-off margin of our optimised hyperplane, because in most of the time, we will not get an ideal dataset, such that the two sample classes are perfectly separable, the error of classification is certainly to happen. We also call this kind of hyperplane as the soft margin hyperplane, which allows training errors within a boundary of [0, Cost] [@Cortes1995, @smo]. 
+After we have the data ready, we can now turn the model. Because we are using the linear kernel first, the only parameter we need to tune is the "cost". This parameter is acting as the Lagrange multiplier in the dual problem for solving the SVM [@Cortes1995]. Geometrically it is the trade-off margin of our optimised hyperplane, because most of the time, we will not get an ideal dataset, such that the two sample classes are perfectly separable, the error of classification is certainly to happen. We also call this kind of hyperplane as the soft margin hyperplane, which allows training errors within a boundary of [0, Cost] [@Cortes1995, @smo]. 
 ```{r eval = FALSE}
 #use the same cv index from trees to make the training process reproducible
 svmcontrol <- trainControl(method = "cv", index = ind_cv)
@@ -411,11 +410,11 @@ gauge_svm$byClass["F1"]
 ```
 The final $F_1$ score 0.6290499 is certainly favourable comparing to the guessing benchmark, but is not as good as the two tree methods in above. This result makes us doubt our choice of linear kernel, so we will try to map our data with a 2nd degree polynomial kernel for comparison. The general idea about kernel is mapping the data into a higher dimension, which can effectively solve the low dimension data, but our data are in a 14 dimensional space already, so we used the linear kernel at first. 
 
-In addition to the "cost" parameter, there is one more parameter "gamma" to be turned for the polynomial kernel. The "gamma" is a scalar coefficient that scales the output value of the the kernel. The function in below is a 2nd degree polynomial kernel function, and the $\vec{x_i}$ and $\vec{x_j}$ are any two different sample points in the dataset, the "r" is a constant set as 0 in default, so we just use the r = 0 by default in our case. As stated in above, the purpose of 2nd or higher dimension kernel is to help solve the low dimension data, so we will just prudently apply the 2nd degree instead of higher ones for our 14 dimensional sample data. 
+In addition to the "cost" parameter, there is one more parameter "gamma" to be turned for the polynomial kernel. The "gamma" is a scalar coefficient that scales the output value of the the kernel. The function in below is a 2nd degree polynomial kernel function, and the $\vec{x_i}$ and $\vec{x_j}$ are any two different sample points in the dataset, the "r" is a constant set as 0 by default, so we just use the "r = 0" at default in our case. As stated in above, the purpose of 2nd or higher dimension kernel is to solve the low dimensional data, so we will just prudently apply the 2nd degree instead of higher ones for our 14 dimensional sample data. 
 $$
 K_{poly} = (\gamma(\vec{x_i}\cdot \vec{x_j})+r)^2
 $$
-Instead of tune these two parameters sequentially, we will tune them in a grid structure. With the 'expand.grid' function we can make a number of potential "cost" times number of potential "gamma" sized data frame, with each row is a cost-gamma pair to be trained with the cross validation. We also use a mini set to train the linear and polynomial kernels, because the polynomial kernel can increase the computation cost exponentially. To create the mini set, we use 20% of the original data, and keep the same proportions of the two income groups. By mimicking the dependent classes distribution, we can make sure the polynomial kernel is also tested in a unbalanced sample environment. At the end, we test these two mini set trained SVM on the full size test set to compare their performances. 
+Instead of tune these two parameters sequentially, we will tune them in a grid structure. With the 'expand.grid' function we can make a number of potential "cost" times number of potential "gamma" sized data frame, with each row is a cost-gamma pair to be trained with the cross validation. We also use a mini set to train the linear and polynomial kernels for comparison, because the polynomial kernel can increase the computation cost exponentially. To create the mini set, we use 20% of the original data, and keep the same proportions of the two income groups. To mimic the dependent classes distribution, we can make sure the polynomial kernel is also tested in a unbalanced sample environment. At the end, we test these two mini set trained SVM on the full size test set to compare their performances. To stress that the performance of this test method is just for comparison within the two kernels, if we use the full size train set, it can take few days even up to a week for the polynomial kernel. 
 ```{r eval = FALSE}
 #2nd degree polynomial kernel, compare with linear kernel
 c <- c(2^-5, 1, 2^5)
@@ -488,9 +487,9 @@ print(lingauge_svm)
 lingauge_svm$byClass["F1"]
 ```
 ```{r echo = FALSE}
-knitr::kable(sum_linpoly)
+knitr::kable(sum_linpoly) #the table is generated in the code file
 ```
-The two $F_1$ scores of the results are 0.3573548 for 2nd degree polynomial, and 0.5908739 for linear. They are proving our original belief that, linear kernel is better than higher dimensional mapping kernels in an already high dimensional sample space. In next, we question ourselves that, because the SVM was designed to solve the purely numeric attributes samples in a vector space, but we have many qualitative attributes, even we have pre-processed them into numbers, those numbers are rather out of nowhere dummy indexes without any real meaning. Then we want to test out, if we just train the linear kernel on those quantitative attributes, whether the performance can be improved. 
+The two $F_1$ scores of the results are 0.3573548 for 2nd degree polynomial, and 0.5908739 for linear. They are proving our original belief that, linear kernel is better than higher dimensional mapping kernels in an already high dimensional sample space. In next we question ourselves in further, because the SVM was designed to solve the purely numeric attributes samples in a vector space, but we have many qualitative attributes, even we have pre-processed them into numbers, those numbers are rather out of nowhere dummy indexes without any real meaning. Then we want to test out, if we just train the linear kernel on those quantitative attributes, whether the performance can be improved. 
 ```{r eval = FALSE}
 #only use numeric predictors
 #the 'cols' is picking all the numeric columns
@@ -517,9 +516,9 @@ print(numgauge_svm)
 numgauge_svm$byClass["F1"]
 ```
 ```{r echo = FALSE}
-knitr::kable(sum_numfull)
+knitr::kable(sum_numfull) #the table is generated in the code file
 ```
-The resulting $F_1$ score is only 0.4123134, much worse than the full attribute linear model, so it means the way we treat the qualitative attributes are working. In next, we will try optimise our attributes selections to train the linear kernel again, and see whether the approach can bring us any improvement on the result. The motivation is from the tree family, for example the random forest trained result suggests that "race" and "native.country" are not top import attributes to make the classifications, so we will try to exclude these two attribute columns in our linear SVM, to see whether a better result can be obtained. 
+The resulting $F_1$ score is only 0.4123134, much worse than the full attribute linear model, so it means the way we treat the qualitative attributes are working. In next, we will try optimise our attributes selections to train the linear kernel again, to see whether the approach can bring us any improvement on the result. The motivation is from the tree family, for example the random forest trained result suggests that "race" and "native.country" are not top import attributes to make the classifications, so we will try to exclude these two attribute columns in our linear SVM, to see whether a better result can be obtained. 
 ```{r echo = FALSE}
 varImp(fit_forest, scale = FALSE)
 ```
@@ -541,14 +540,14 @@ impgauge_svm <- confusionMatrix(imppred_svm, imptest_svm$income,
 print(impgauge_svm)
 impgauge_svm$byClass["F1"]
 ```
-The result $F_1$ score 0.6300872 is about the same as the full attributes model, this result can somewhat validate our assumption that, use the selective important predictors is at least as good as the full predictor model, and in some particular context, it could be a slightly better choice, if the computation cost is considered during for the process. By talking about computation cost, each of the SVM models we have tried in above can take few hours to train, especially the polynomial kernel can take days to train, by considering my hardware environment is a 5 years old i7 cpu windows machine.
+The result $F_1$ score 0.6300872 is about the same as the full attributes model, this result can somewhat validate our assumption that, use the selective important predictors is at least as good as the full predictor model, and in some particular context, it could be a slightly better choice, if the computation cost is considered for the process. By talking about computation cost, each of the SVM models we have tried in above can take few hours to train, especially the polynomial kernel can take days to train, by considering my hardware environment is a 5 years old i7 cpu windows machine.
 ```{r echo = FALSE}
-knitr::kable(sum_impfull)
+knitr::kable(sum_impfull) #the table is generated in code file
 ```
-Overall the best SVM is important variable linear kernel, as well as the full predictor linear kernel, because their $F_1$ scores have very slight difference. Since we have transformed our dataset into full numeric set already for the SVM algorithm, intuitively we can use the same numeric dataset to train some methods, which is based on pure numeric data. In next, we will try to fit the logistic regression with our transformed numeric dataset, to see if it can compete with trees and SVM methods. 
+Overall the best SVM is important variable linear kernel, as well as the full predictors linear kernel, because their $F_1$ scores have very slight difference. Since we have transformed our dataset into full numeric set already for the SVM algorithm, intuitively we can use the same numeric dataset to train some other methods, which is based on pure numeric data. In next, we will try to fit the logistic regression with our transformed numeric dataset, to see if it can compete with trees and SVM methods. 
 
 ### 4. Logistic Regression  
-We will use both the full predictors and selective important predictors from the above SVM dataset to test the performance of logistic regression, and we are using the "glm" in "caret" package to implement the algorithm. 
+We will use both the full predictors and selective important predictors from the above SVM dataset to test the performance of logistic regression, and we are using the binomial "glm" in "caret" package to implement the algorithm. 
 ```{r eval = FALSE}
 #use the full predictor to train and test
 fit_glm <- train(income ~., data = train_svm, method = "glm", 
@@ -577,7 +576,7 @@ impgauge_glm <- confusionMatrix(imppred_glm, imptest_svm$income,
 print(impgauge_glm)
 impgauge_glm$byClass["F1"]
 ```
-The result $F_1$ scores of full predictors and important predictors are 0.6245919 and 0.6242315 respectively, so we can conclude that the logistic regression is performing the same over these two datasets. After all those methods we have tried by now, it is instantaneously for us to try combine them in together with ensemble method. 
+The result $F_1$ scores of full predictors and important predictors are 0.6245919 and 0.6242315 respectively, so we can conclude that the logistic regression is performing the same over these two datasets. After all those methods we have tried by now, it is instantaneously for us to think about combining them in together with ensemble method. 
 
 ### 5. Ensemble  
 In general there are three kinds of ensemble methods: bagging, boosting, and stacking, and we will try to combine our previous models by stacking. The reason is that stacking method treats different models results like predictors, and fit them with a defined meta-model [@Hastie2009-at], and the meta-model options are very versatile, so it can mimic both bagging and boosting with the respective model selection. And because our case is a classification kind problem, we will try logistic regression and adaptive boosting methods as our meta-model to combine the random forest, linear SVM, and logistic regression. 
@@ -620,9 +619,9 @@ engauge_rf$byClass["F1"]
 entune_rf <- train(income ~., data = train_svm, method = "rf",
                      trControl = rfcontrol, 
                      tuneGrid = data.frame(mtry = seq(1, 5, 1)))
-enbest_mtry <- entune_rf$bestTune$mtry
+enbest_mtry <- entune_rf$bestTune$mtry #re-turned mtry
 
-en_nodes <- seq(1, 20, 2)
+en_nodes <- seq(1, 20, 2) #re-tune the nodesize
 entune_nds <- sapply(en_nodes, function(nd){
   train(income ~., data = train_svm, method = "rf",
         trControl = rfcontrol,
@@ -635,7 +634,7 @@ enbest_node <- en_nodes[which.max(entune_nds)]
 qplot(en_nodes, entune_nds, geom = c("point", "line"))
 ```
 ```{r eval = FALSE}
-en_ntrees <- seq(10, 200, 10)
+en_ntrees <- seq(10, 200, 10) #re-turn the ntree
 entune_ntree <- sapply(en_ntrees, function(nt){
   train(income ~., data = train_svm, method = "rf",
         trControl = rfcontrol,
@@ -662,7 +661,7 @@ engauge_forest <- confusionMatrix(enpred_forest, as.factor(test_svm$income),
 print(engauge_forest)
 engauge_forest$byClass["F1"]
 ```
-By comparing the two result $F_1$ scores, the re-turned result is 0.6878936, which is better but in a very limited scope than the pre-tuned 0.6767642. We choose to use the re-tuned parameters in our final ensemble. Because we are using the digitised dataset from SVM in above, we can use the same parameters as before for the "glm" and "svmLinear2". 
+By comparing the two result $F_1$ scores, the re-turned result is 0.6878936, which is better but in a very limited scope than the pre-tuned 0.6767642. We choose to use the re-tuned parameters in our final ensemble. Because we are using the digitised dataset from SVM in above, we can use the same parameters as before for the binomial "glm" and "svmLinear2". 
 ```{r eval = FALSE}
 #5-fold cross validation used to create dependent probs from learning
 #for later use in the combining process
@@ -704,16 +703,16 @@ gauge_stackbst <- confusionMatrix(pred_stack, as.factor(test_svm$income),
 ```{r echo = FALSE}
 gauge_stackbst$byClass["F1"]
 ```
-The results are interesting, the two different meta-models are giving us the exact same $F_1$ scores 0.6879334. We suspect the same results are caused by two possible reasons. Firstly, the two stacking meta-models we use are all voting decision based, which use the consensus from the results of those three base models. Secondly, these three base models are generating about the same prediction results as shown in below. According to the 'vignette' of the "caretEnsemble" package, we should consider to select the uncorrelated or at least weak correlated base models for ensemble [@ensemble]. The original numeric and categorical attributes data structure actually creates a paradox of choosing uncorrelated models and without modifying the dataset. We believe the process of digitising those qualitative values can loose the real information of those attributes at some level. But if we do not digitise those qualitative values, then we have very limited choices of models to choose from, basically only the tree family we can possibly use. 
+The results are interesting, the two different meta-models are giving us the exact same $F_1$ scores 0.6879334. We suspect the same results are caused by two possible reasons. Firstly, the two stacking meta-models we use are all voting decision based, which use the consensus from the results of those three base models. Secondly, these three base models are generating about the same prediction results as shown in below. According to the 'vignette' of the "caretEnsemble" package, we should consider to select the uncorrelated or at least weak correlated base models for ensemble [@ensemble]. The original numeric and categorical attributes data structure actually creates a paradox of choosing uncorrelated models and without modifying the dataset. We believe the process of digitising those qualitative values can loose the intrinsic information of those attributes at some level. But if we do not digitise those qualitative values, then we have very limited choices of models to choose from, basically only the tree family we can possibly use. 
 ```{r echo = FALSE}
 modelCor(resamples(ensemble_fit))
 ```
 
 ## Conclusion  
-By comparing all the methods we have tested in above, it concludes that the best performing result is the random forest having the $F_1$ score of 0.6908837, and it even outperformed the stacking method, but the difference is not major. By comparing the across all individual methods $F_1$ scores, The trees family methods outperform other numeric methods. This report in overall proves that, for a quantitative and qualitative mixed attributes dataset, the most effective algorithm would be the tree based. 
+By comparing all the methods we have tested in above, it concludes that the best performing result is the random forest having the $F_1$ score of 0.6908837, and it even outperformed the stacking method, but the difference is not major. By comparing across all individual methods $F_1$ scores, The trees family methods outperform other numeric methods. This report in overall proves that, for a quantitative and qualitative mixed attributes dataset, the most effective algorithm would be the tree based. 
 ```{r echo = FALSE}
-knitr::kable(summary)
+knitr::kable(summary) #table is generated in the code file
 ```
-The last thing we want to justify is that, even the best result $F_1$ score is still under 0.7, a very mediocre number by considering the range of $F_1$ is [0, 1]. That is because the two income groups in our dataset is highly unbalanced with a 75/25 distribution ratio, and our target ">50K" group is the under sampled one. Since the $F_1$ score only cares about the specified class of ">50K", it tells us how good our prediction in both the only ">50K" showing environment, and both income groups showing environment. In order to improve the $F_1$ score, we could try to increase the result in either environment. The possible approaches would be using a more sophisticate way to digitise those qualitative attributes, then we might be able to achieve a better result from the SVM, and also can fit with the popular neural net. In terms of the stacking, with a better digitised dataset, we may be able to find some uncorrelated methods to achieve a better ensemble result. 
+The last thing we want to justify is that, even the best result $F_1$ score is still under 0.7, a very mediocre number by considering the range of $F_1$ is [0, 1]. That is because the two income groups in our dataset is highly unbalanced with a 75/25 distribution ratio, and our target ">50K" group is the under sampled one. Since the $F_1$ score only cares about the target class of ">50K", it tells us how good our prediction in both the only ">50K" showing environment, and both income groups showing environment. In order to improve the $F_1$ score, we could try to increase the result in either environment. The possible approaches would be using a more sophisticate way to digitise those qualitative attributes, then we might be able to achieve a better result from the SVM, and also can fit with the popular neural net. In terms of the stacking, with a better digitised dataset, we may be able to find some uncorrelated methods to achieve a better ensemble result. 
 
 ## References  
